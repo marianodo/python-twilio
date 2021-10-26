@@ -1,104 +1,58 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
 
-"""Simple Bot to reply to Telegram messages.
-This program is dedicated to the public domain under the CC0 license.
-This Bot uses the Updater class to handle the bot.
-First, a few handler functions are defined. Then, those functions are passed to
-the Dispatcher and registered at their respective places.
-Then, the bot is started and runs until we press Ctrl-C on the command line.
-Usage:
-Basic Echobot example, repeats messages.
-Press Ctrl-C on the command line or send a signal to the process to stop the
-bot.
-"""
-
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters
 import logging
-import re
+import requests
+import time
 from dbSigesmen import Database
 import json
-import time
-import unicodedata
-
-
-MSG_OK = "Mensaje al código {0} envíado correctamente"
-BAD_CODE = "Códgo {0} no pertenece a nuestra base de datos"
-BAD_MSG = "Mensaje incorrecto. Recuerde que es clave o código y luego el mensaje."
-MSG_FROM_TELEGRAM = "Enviado desde Telegram."
-
-REGULAR_EXP = r"\d{4}"
 DATABASE_FILE = "dbConf.json"
+with open(DATABASE_FILE) as db:
+	configFile = json.load(db)
+db = Database(configFile["user"], configFile["passwd"], configFile["host"], configFile["port"], configFile["database"])
+TOKEN = configFile["telegram_token"]
+API = f"https://api.telegram.org/bot{TOKEN}"
+
 # Enable logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                    level=logging.INFO)
+logging.basicConfig(
+	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
+)
 
 logger = logging.getLogger(__name__)
 
-with open(DATABASE_FILE) as db:
-    configFile = json.load(db)
-db = Database(configFile["user"], configFile["passwd"], configFile["host"], configFile["port"], configFile["database"])
-
-# Define a few command handlers. These usually take the two arguments bot and
-# update. Error handlers also receive the raised TelegramError object in error.
-def start(bot, update):
-    """Send a message when the command /start is issued."""
-    update.message.reply_text('Hi!')
-
-
-def help(bot, update):
-    """Send a message when the command /help is issued."""
-    update.message.reply_text('Help!')
-
-
-def echo(bot, update):
-    """Echo the user message."""
-    #newMsg = ''.join(c for c in unicodedata.normalize('NFD', update.message.text.strip()) if unicodedata.category(c) != 'Mn')
-    newMsg = update.message.text.strip().encode('ascii', 'ignore').decode('ascii')
-    match = re.match(REGULAR_EXP, newMsg)
-    if match:
-        code = match.group()
-        message = re.sub(code, '', newMsg)
-
-        if db.isCodeExists(code):
-	    msgId = db.sendMessage(code, "{0}. {1}".format(message, MSG_FROM_TELEGRAM))
-            update.message.reply_text(MSG_OK.format(code))
-        else:
-            update.message.reply_text(BAD_CODE.format(code))
-    else:
-        update.message.reply_text(BAD_MSG)
-
-def error(bot, update, error):
-    """Log Errors caused by Updates."""
-    logger.warning('Update "%s" caused error "%s"', update, error)
+def routine():
+	unsent_msg = db.get_unsent()
+	logger.info(f"Total mensajes sin enviar: {len(unsent_msg)}")
+	for msg in unsent_msg:
+		id = msg[0]
+		message = msg[1]
+		code_cli = msg[3]
+		phones = db.get_phone_from_code(code_cli)
+		phones_list = phones.split(";")
+		logger.info(f"Procesando mensaje {message}")
+		for phone in phones_list:
+			logger.info(f"Enviando mensaje a {phone}")
+			success, obs = send_message_to_phone(phone.strip(), message)
+			if not success:
+				logger.error(f"Mensaje al telefono {phone} no enviado")
+				db.insert_obs(obs)
+		db.mark_as_sent(id) # TODO: we should mark as sent when we really sent the message
 
 
-def main():
-    """Start the bot."""
-    # Create the EventHandler and pass it your bot's token.
-    updater = Updater("1001888963:AAGzO49bi_wsdyEG5yGvecuoGl3MGMk2dzw")
-
-    # Get the dispatcher to register handlers
-    dp = updater.dispatcher
-
-    # on different commands - answer in Telegram
-    #dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("help", help))
-
-    # on noncommand i.e message - echo the message on Telegram
-    dp.add_handler(MessageHandler(Filters.text, echo))
-
-    # log all errors
-    dp.add_error_handler(error)
-
-    # Start the Bot
-    updater.start_polling()
-
-    # Run the bot until you press Ctrl-C or the process receives SIGINT,
-    # SIGTERM or SIGABRT. This should be used most of the time, since
-    # start_polling() is non-blocking and will stop the bot gracefully.
-    updater.idle()
+def send_message_to_phone(phone, message):
+	last_num_phone = phone[-7:]
+	chat_id = db.get_chat_id(last_num_phone)
+	if chat_id:
+		SEND_MESSAGE = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
+		r = requests.get(SEND_MESSAGE)
+		if r.status_code == 200:
+			return True, ""
+		else:
+			return False, f"Codigo de error: {r.status_code}. Texto: {r.text}"
+	else:
+		error = f"El teléfono {phone} no está registrado"
+		return False, error
 
 
 if __name__ == '__main__':
-    main()
+	while True:
+		routine()
+		time.sleep(60)
