@@ -26,6 +26,8 @@ def routine():
 		message = msg[1]
 		code_cli = msg[3]
 		phones = db.get_phone_from_code(code_cli)
+		if not phones:
+			return
 		phones_list = phones.split(";")
 		logger.info(f"Procesando mensaje {message}")
 		for phone in phones_list:
@@ -54,5 +56,10 @@ def send_message_to_phone(phone, message):
 
 if __name__ == '__main__':
 	while True:
-		routine()
+		try:
+			routine()
+		except Exception as e:
+			print(e)
+			print("Error al tratar de enviar un mensaje")
+			time.sleep(60) # Dormimos el proceso un minuto extra	
 		time.sleep(60)

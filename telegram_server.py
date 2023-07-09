@@ -12,7 +12,7 @@ Send /start to initiate the conversation.
 Press Ctrl-C on the command line or send a signal to the process to stop the
 bot.
 """
-
+import time
 import logging
 from telegram import ReplyKeyboardMarkup, ReplyKeyboardRemove, Update, KeyboardButton
 from telegram.ext import (
@@ -43,10 +43,10 @@ PHONE= range(1)
 
 def start(update: Update, context: CallbackContext) -> int:
     """Starts the conversation and asks the user about their gender."""
-    reply_keyboard = [[KeyboardButton("Mi contacto", request_contact=True)]]
+    reply_keyboard = [[KeyboardButton("Comenzar a recibir mensajes", request_contact=True)]]
 
     update.message.reply_text(
-        'Hola. Soy el Bot de Integralcom. Necesito que me compartas tu teléfono para poder enviarte los mensajes. Gracias',
+        'Hola. Soy el BOT de Integralcom. ¿Deseas comenzar a recibir los mensajes?',
         reply_markup=ReplyKeyboardMarkup(
             reply_keyboard, one_time_keyboard=True
         ),
@@ -62,12 +62,16 @@ def phone(update: Update, context: CallbackContext) -> int:
     chat_id = update.message.chat.id
     phone = update.effective_message.contact.phone_number
     print(phone)
-    if chat_id and phone:
-        value = db.insert_chat_id(phone, chat_id)
-        print(value)
-        text = 'Gracias. Estás registrado para recibir nuestras notificaciones'
-    else:
-        text = "Ocurrió un problema. No pudimos registart su contacto. Intente nuevamente"
+    try:
+        if chat_id and phone:
+            value = db.insert_chat_id(phone, chat_id)
+            print(value)
+            text = 'Gracias. Estás registrado para recibir nuestras notificaciones'
+        else:
+            text = "Ocurrió un problema. No pudimos registar su contacto. Intente nuevamente"
+    except Exception as e:
+        text = "Ocurrió un problema. No pudimos registar su contacto. Intente nuevamente"
+        print(f"ERROR: {e}. Chat_Id: {chat_id}, Phone: {phone}")
     update.message.reply_text(
         text,
         reply_markup=ReplyKeyboardRemove(),
@@ -116,4 +120,8 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    main()
+    while True:
+        try:
+            main()
+        except:
+            time.sleep(60)

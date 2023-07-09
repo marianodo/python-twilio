@@ -1,0 +1,1 @@
+python C:\Users\Administrador\Desktop\sigesmen-telegram\integralcom.py
