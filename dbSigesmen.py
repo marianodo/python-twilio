@@ -43,6 +43,9 @@ class Database(object):
     def open(self):
         self.__open()
 
+    def close(self):
+        self.__close()
+
     def __close(self):
         self.__session.close()
         self.__connection.close()
