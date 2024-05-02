@@ -1,14 +1,17 @@
-
+import os
 import logging
 import requests
 import time
 from dbSigesmen import Database
 import json
-DATABASE_FILE = "dbConf.json"
-with open(DATABASE_FILE) as db:
-	configFile = json.load(db)
-db = Database(configFile["user"], configFile["passwd"], configFile["host"], configFile["port"], configFile["database"])
-TOKEN = configFile["telegram_token"]
+
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = os.getenv("DB_PORT")
+DB_DATABASE = os.getenv("DB_DATABASE")
+TOKEN = os.getenv("TOKEN")
+db = Database(DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE)
 API = f"https://api.telegram.org/bot{TOKEN}"
 
 # Enable logging
@@ -55,11 +58,7 @@ def send_message_to_phone(phone, message):
 
 
 if __name__ == '__main__':
-	while True:
-		try:
-			routine()
-		except Exception as e:
-			print(e)
-			print("Error al tratar de enviar un mensaje")
-			time.sleep(60) # Dormimos el proceso un minuto extra	
-		time.sleep(60)
+	try:
+		routine()
+	except Exception as e:
+		print(f"Error al tratar de enviar un mensaje: {e}")
