@@ -58,12 +58,8 @@ def send_message_to_phone(phone, message):
 
 
 if __name__ == '__main__':
-	i = 0
-	while i < 15:
-		try:
-			routine()
-		except Exception as e:
-			print(e)
-			print("Error al tratar de enviar un mensaje")
-		time.sleep(60)
-		i += 1
+	try:
+		routine()
+	except Exception as e:
+		print(f"Error al tratar de enviar un mensaje: {e}")
+	time.sleep(60)
