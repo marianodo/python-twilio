@@ -60,8 +60,8 @@ def send_message_to_phone(phone, message):
 if __name__ == '__main__':
 	try:
 		routine()
-		db.close()
 	except Exception as e:
 		print(f"Error al tratar de enviar un mensaje: {e}")
+	db.close()
 	time.sleep(60)
 
