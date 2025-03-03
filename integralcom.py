@@ -23,6 +23,10 @@ class JsonFormatter(logging.Formatter):
             "logger": record.name,
             "line_number": record.lineno
         }
+        if record.exc_info: # Verifica si hay información de excepción
+            exc_type, exc_value, exc_traceback = record.exc_info
+            log_message["traceback"] = traceback.format_exception(exc_type, exc_value, exc_traceback)
+
         return json.dumps(log_message)
 
 handler = logging.StreamHandler()
@@ -43,7 +47,7 @@ def with_db_connection(func):
                 with Database(DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE) as db:
                     return func(db, *args, **kwargs)
             except Exception as e:
-                logger.error(f"Error de conexión a la DB (intento {attempt + 1} de {retries}): {e}")
+                logger.error(f"Error de conexión a la DB (intento {attempt + 1} de {retries}): {e}", exc_info=True)
                 time.sleep(5)  # Espera antes de reintentar
         logger.critical("No se pudo conectar a la base de datos después de varios intentos.")
         raise ConnectionError("Fallo la conexión a la base de datos.")
