@@ -133,5 +133,8 @@ if __name__ == '__main__':
     while True:
         try:
             main()
-        except:
-            time.sleep(60)
+        except Exception as e:
+            print(f"Error en el ciclo principal: {e}")
+            traceback.print_exc()
+        
+        time.sleep(60)
