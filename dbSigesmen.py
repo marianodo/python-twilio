@@ -1,6 +1,6 @@
 import mysql.connector as MySQLdb
 import json
-
+import time
 DATABASE_FILE = "dbConf.json"
 
 
@@ -40,7 +40,7 @@ class Database(object):
             except MySQLdb.Error as e:
                 print(f"Intento {attempt+1} - Error conectando a MySQL: {e}")
                 if attempt < retries - 1:
-                    sleep(delay)
+                    time.sleep(delay)
                 else:
                     raise
 
