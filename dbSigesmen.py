@@ -102,3 +102,15 @@ class Database(object):
     def get_chat_id(self, phone):
         return self.__selectOneRow(GET_CHAT_ID.format(phone))
         
+    def __enter__(self):
+        """Para usar con 'with'."""
+        self.open()
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        """Para usar con 'with'. Maneja commit/rollback."""
+        if exc_type is not None:
+            self.__connection.rollback()
+        else:
+            self.__connection.commit()
+        self.close()
