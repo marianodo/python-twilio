@@ -4,6 +4,11 @@ app = Flask(__name__)
 
 mensaje = "Hola, este es un mensaje automatizado. Si desea escuchar el mensaje nuevamente, presione 1."
 
+
+@app.route("/", methods=['GET'])
+def main():
+    return "Hola mundo"
+
 @app.route("/inicio", methods=['POST'])
 def inicio():
     # Primer mensaje (cuando la llamada se conecta)
