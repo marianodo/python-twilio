@@ -7,7 +7,8 @@ mensaje = "Hola, este es un mensaje automatizado. Si desea escuchar el mensaje n
 
 @app.route("/", methods=['GET'])
 def main():
-    return "Hola mundo"
+    print("ACAAAAA")
+    return "Hola mundo", 200
 
 @app.route("/inicio", methods=['POST'])
 def inicio():
