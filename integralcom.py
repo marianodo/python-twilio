@@ -4,6 +4,7 @@ import requests
 import time
 from dbSigesmen import Database
 import json
+import traceback
 
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
