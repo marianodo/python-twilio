@@ -26,16 +26,26 @@ from telegram.ext import (
 
 from dbSigesmen import Database
 import json
-DATABASE_FILE = "dbConf.json"
-with open(DATABASE_FILE) as db:
-    configFile = json.load(db)
-db = Database(configFile["user"], configFile["passwd"], configFile["host"], configFile["port"], configFile["database"])
-TOKEN = configFile["telegram_token"]
+DB_USER = os.getenv("DB_USER")
+DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_HOST = os.getenv("DB_HOST")
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_DATABASE = os.getenv("DB_DATABASE")
+TOKEN = os.getenv("TOKEN")
 
-# Enable logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO
-)
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_message = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname.lower(),
+            "message": record.getMessage(),
+            "logger": record.name
+        }
+        return json.dumps(log_message)
+
+handler = logging.StreamHandler()
+handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +64,6 @@ def start(update: Update, context: CallbackContext) -> int:
 
     return PHONE
 
-
 def phone(update: Update, context: CallbackContext) -> int:
     """Stores the selected gender and asks for a photo."""
 
@@ -64,9 +73,10 @@ def phone(update: Update, context: CallbackContext) -> int:
     print(phone)
     try:
         if chat_id and phone:
-            value = db.insert_chat_id(phone, chat_id)
-            print(value)
-            text = 'Gracias. Estás registrado para recibir nuestras notificaciones'
+            with Database(DB_USER, DB_PASSWORD, DB_HOST, DB_PORT, DB_DATABASE) as db:
+                value = db.insert_chat_id(phone, chat_id)
+                print(value)
+                text = 'Gracias. Estás registrado para recibir nuestras notificaciones'
         else:
             text = "Ocurrió un problema. No pudimos registar su contacto. Intente nuevamente"
     except Exception as e:
