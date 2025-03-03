@@ -59,8 +59,9 @@ def with_db_connection(func):
 def routine(db):
     unsent_messages = db.get_unsent()
     logger.info(f"Total mensajes sin enviar: {len(unsent_messages)}")
-
+    
     for msg in unsent_messages:
+        logger.info(f"Mesanje: {msg}")
         msg_id, message, _, code_cli = msg
 
         phones = db.get_phone_from_code(code_cli)
