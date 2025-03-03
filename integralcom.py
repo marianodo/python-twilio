@@ -14,11 +14,19 @@ TOKEN = os.getenv("TOKEN")
 
 API = f"https://api.telegram.org/bot{TOKEN}"
 
-# Configuración de logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
+class JsonFormatter(logging.Formatter):
+    def format(self, record):
+        log_message = {
+            "timestamp": self.formatTime(record),
+            "level": record.levelname.lower(),
+            "message": record.getMessage(),
+            "logger": record.name
+        }
+        return json.dumps(log_message)
+
+handler = logging.StreamHandler()
+handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 logger = logging.getLogger(__name__)
 
