@@ -62,7 +62,7 @@ def routine(db):
     
     for msg in unsent_messages:
         logger.info(f"Mesanje: {msg}")
-        msg_id, message, _, code_cli = msg
+        msg_id, message, _, code_cli, _, _, _ = msg
 
         phones = db.get_phone_from_code(code_cli)
         if not phones:
