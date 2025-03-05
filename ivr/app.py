@@ -9,11 +9,12 @@ app = Flask(__name__)
 @app.route('/voice', methods=['POST'])
 def voice():
     """Genera el TwiML para la llamada."""
+    mensaje = request.args.get('mensaje', '')
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say>{mensaje}</Say>
+        <Say voice="alice" language="es-ES">{mensaje}</Say>
         <Gather input="dtmf" numDigits="1" action="/gather">
-            <Say>Presiona 1 para escuchar el mensaje nuevamente.</Say>
+            <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
         </Gather>
         <Say>Gracias por tu llamada.</Say>
     </Response>
@@ -23,20 +24,21 @@ def voice():
 @app.route('/gather', methods=['POST'])
 def gather():
     """Maneja la entrada del usuario."""
+    mensaje = request.args.get('mensaje', '')
     if 'Digits' in request.form and request.form['Digits'] == '1':
         twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say>{mensaje}</Say>
+            <Say voice="alice" language="es-ES">{mensaje}</Say>
             <Gather input="dtmf" numDigits="1" action="/gather">
-                <Say>Presiona 1 para escuchar el mensaje nuevamente.</Say>
+                <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
             </Gather>
-            <Say>Gracias por tu llamada.</Say>
+            <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
         </Response>
         '''
     else:
         twiml = '''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say>Gracias por tu llamada.</Say>
+            <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
         </Response>
         '''
     return Response(twiml, mimetype='application/xml')
