@@ -13,7 +13,7 @@ def voice():
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
     <Response>
         <Say voice="alice" language="es-ES">{mensaje}</Say>
-        <Gather input="dtmf" numDigits="1" action="https://python-twilio-production.up.railway.app/gather?mensaje={mensaje}">
+        <Gather input="dtmf" numDigits="1" action="https://python-twilio-production.up.railway.app/gather?mensaje=luminoso">
             <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
         </Gather>
         <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
@@ -32,7 +32,7 @@ def gather():
         twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
             <Say voice="alice" language="es-ES">{mensaje}</Say>
-            <Gather input="dtmf" numDigits="1" action="https://python-twilio-production.up.railway.app/gather?mensaje={mensaje}">
+            <Gather input="dtmf" numDigits="1" action="https://python-twilio-production.up.railway.app/gather?mensaje=luminoso">
                 <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
             </Gather>
             <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
