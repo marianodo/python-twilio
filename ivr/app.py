@@ -13,14 +13,13 @@ def voice():
     mensaje_codificado = requests.utils.quote(mensaje)
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say voice="alice" language="es-ES">{mensaje}</Say>
+        <Say voice="alice" language="es-ES" rate="70%">{mensaje}</Say>
         <Gather input="dtmf" numDigits="1" action="/gather?mensaje={mensaje_codificado}">
             <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
         </Gather>
         <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
     </Response>
     '''
-    print("voice: ",twiml)
     return Response(twiml, mimetype='application/xml')
 
 @app.route('/gather', methods=['POST', 'GET'])
@@ -28,12 +27,10 @@ def gather():
     """Maneja la entrada del usuario."""
     mensaje = request.args.get('mensaje', 'Mensaje no proporcionado')
     mensaje_codificado = requests.utils.quote(mensaje)
-    print(f"Digits: {request.form.get('Digits')}") #Agrega esta linea
     if 'Digits' in request.form and request.form['Digits'] == '1':
-        print("El usuario presionó 1") #Agrega esta linea
         twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="alice" language="es-ES">{mensaje}</Say>
+            <Say voice="alice" language="es-ES" rate="70%">{mensaje}</Say>
             <Gather input="dtmf" numDigits="1" action="/gather?mensaje={mensaje_codificado}">
                 <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
             </Gather>
@@ -41,13 +38,11 @@ def gather():
         </Response>
         '''
     else:
-        print("El usuario no presionó 1") #Agrega esta linea
         twiml = '''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
             <Say language="es-ES" rate="85%">Gracias por tu llamada.</Say>
         </Response>
         '''
-    print("gather: ",twiml)
     return Response(twiml, mimetype='application/xml')
 
 
