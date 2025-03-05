@@ -1,1 +1,0 @@
-web: gunicorn ivr:app --bind 0.0.0.0:80
