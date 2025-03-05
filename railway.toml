@@ -1,0 +1,4 @@
+[[jobs]]
+name = "Integralcom Telegram"
+command = "python integralcom.py"
+schedule = "* * * * *"  # Esto significa "cada minuto"ls
