@@ -12,11 +12,11 @@ def voice():
     mensaje = request.args.get('mensaje', 'Mensaje no proporcionado') #Obtiene el parametro mensaje
     twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
     <Response>
-        <Say voice="alice" language="es-ES">{mensaje}</Say>
+        <Say>{mensaje}</Say>
         <Gather input="dtmf" numDigits="1" action="/gather?mensaje={mensaje}">
-            <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
+            <Say>Presiona 1 para escuchar el mensaje nuevamente.</Say>
         </Gather>
-        <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
+        <Say>Gracias por tu llamada.</Say>
     </Response>
     '''
     return Response(twiml, mimetype='application/xml')
@@ -28,17 +28,17 @@ def gather():
     if 'Digits' in request.form and request.form['Digits'] == '1':
         twiml = f'''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="alice" language="es-ES">{mensaje}</Say>
+            <Say>{mensaje}</Say>
             <Gather input="dtmf" numDigits="1" action="/gather?mensaje={mensaje}">
-                <Say voice="alice" language="es-ES">Presiona 1 para escuchar el mensaje nuevamente.</Say>
+                <Say>Presiona 1 para escuchar el mensaje nuevamente.</Say>
             </Gather>
-            <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
+            <Say>Gracias por tu llamada.</Say>
         </Response>
         '''
     else:
         twiml = '''<?xml version="1.0" encoding="UTF-8"?>
         <Response>
-            <Say voice="alice" language="es-ES">Gracias por tu llamada.</Say>
+            <Say>Gracias por tu llamada.</Say>
         </Response>
         '''
     return Response(twiml, mimetype='application/xml')
