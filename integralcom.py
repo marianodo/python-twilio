@@ -84,9 +84,8 @@ def routine(db):
                 db.insert_obs(obs)
                 all_sent = False
 
-        if all_sent:
-            db.mark_as_sent(msg_id)
-        else:
+        db.mark_as_sent(msg_id)
+        if not all_sent:
             logger.warning(f"El mensaje {msg_id} no fue enviado correctamente a todos los destinatarios.")
 
 
