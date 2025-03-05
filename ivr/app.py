@@ -1,5 +1,5 @@
 from flask import Flask, request, Response
-
+import requests
 
 # Texto a convertir a voz
 mensaje = 'Este es un mensaje de prueba. Presiona 1 para escucharlo nuevamente.'
