@@ -10,7 +10,7 @@ def hello_world():
 
 
 
-@app.route("/inicio", methods=['POST'])
+@app.route("/inicio", methods=['POST', 'GET'])
 def inicio():
     print("BBBBBBBBBBBBBBBBBBB")
     mensaje = request.args.get('mensaje', 'Este es un mensaje por defecto.')
