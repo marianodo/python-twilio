@@ -12,6 +12,7 @@ DB_HOST = os.getenv("DB_HOST")
 DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_DATABASE = os.getenv("DB_DATABASE")
 TOKEN = os.getenv("TOKEN")
+SLEEP = int(os.getenv("SLEEP", "60"))
 
 API = f"https://api.telegram.org/bot{TOKEN}"
 
@@ -118,4 +119,4 @@ if __name__ == '__main__':
         except Exception as e:
             logger.exception(f"Error en la ejecución principal: {e}")
 
-        time.sleep(60)
+        time.sleep(SLEEP)
