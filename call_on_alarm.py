@@ -103,7 +103,7 @@ def routine(db):
         row = db.get_one_row(query)
         if row:
             id, client, name, phone, event = row
-            logger.info(message, name)
+            print(message, name)
             
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
                 tmp_list.insert(phone, 20)
