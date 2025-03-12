@@ -67,7 +67,7 @@ class ListaTemporal:
 tmp_list = ListaTemporal()
 
 def is_event_to_call(event: str, msg: str) -> bool:
-    return bool(re.search(msg.lower(), event))
+    return bool(re.search(event, msg.lower()))
 
 
 def with_db_connection(func):
