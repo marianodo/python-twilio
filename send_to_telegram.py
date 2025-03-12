@@ -58,7 +58,8 @@ def with_db_connection(func):
 
 @with_db_connection
 def routine(db):
-    unsent_messages = db.get_unsent()
+    query = "SELECT * FROM mensaje_a_telegram WHERE men_status = 0"
+    unsent_messages = db.get_unsent(query)
     logger.info(f"Total mensajes sin enviar: {len(unsent_messages)}")
     
     for msg in unsent_messages:
