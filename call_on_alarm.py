@@ -99,10 +99,11 @@ def routine(db):
     for msg in unsent_messages:
         msg_id, message, _, code_cli, _, _, _ = msg
         query = f"SELECT * FROM clientes_llamada WHERE abonado = {code_cli}"
-        
+
         row = db.get_one_row(query)
         if row:
             id, client, name, phone, event = row
+            logger.info(message, name)
             
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
                 tmp_list.insert(phone, 20)
