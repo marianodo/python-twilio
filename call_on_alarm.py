@@ -38,7 +38,7 @@ logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 logger = logging.getLogger(__name__)
 
-tmp_list = ListaTemporal()
+
 
 class ListaTemporal:
     def __init__(self):
@@ -64,6 +64,7 @@ class ListaTemporal:
     def get_list(self):
         return self.lista
 
+tmp_list = ListaTemporal()
 
 def is_event_to_call(event: str, msg: str) -> bool:
     return bool(re.search(msg.lower(), event))
