@@ -54,7 +54,7 @@ class Database(object):
         self.__session.execute(query)
         result = self.__session.fetchone()
         
-        return result[0] if result else []
+        return result
 
     def __selectAll(self, query):
         self.__session.execute(query)
