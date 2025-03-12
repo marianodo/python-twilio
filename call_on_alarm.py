@@ -97,11 +97,9 @@ def routine(db):
     logger.info(f"Total mensajes sin enviar: {len(unsent_messages)}")
     
     for msg in unsent_messages:
-        logger.info(f"Mesanje: {msg}")
         msg_id, message, _, code_cli, _, _, _ = msg
         query = f"SELECT * FROM clientes_llamada WHERE abonado = {code_cli}"
         row = db.get_one_row(query)
-        logger.info(f"ROW: {row}")
         if row:
             id, client, name, phone, event = row
             
