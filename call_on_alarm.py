@@ -6,6 +6,8 @@ from dbSigesmen import Database
 import json
 import traceback
 import re
+from twilio.rest import Client
+import requests
 
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -14,7 +16,10 @@ DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_DATABASE = os.getenv("DB_DATABASE")
 TOKEN = os.getenv("TOKEN")
 SLEEP = int(os.getenv("SLEEP", "60"))
-
+ACCOUNT_SID = os.getenv("ACCOUNT_SID")
+TWILIO_TOKEN = os.getenv("TWILIO_TOKEN")
+TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
+TWILIO_IVR = os.getenv("TWILIO_IVR")
 API = f"https://api.telegram.org/bot{TOKEN}"
 
 class JsonFormatter(logging.Formatter):
@@ -88,6 +93,17 @@ def with_db_connection(func):
         raise ConnectionError("Fallo la conexión a la base de datos.")
     return wrapper
 
+def call_to_phone(message, phone):
+    mensaje = f"Este es un mensaje de integralcom. {message}"
+    mensaje_codificado = requests.utils.quote(mensaje)
+
+    client = Client(ACCOUNT_SID, TWILIO_TOKEN)
+    call = client.calls.create(
+        to=phone,
+        from_=TWILIO_NUMBER,
+        url=f'{TWILIO_IVR}{mensaje_codificado}' #Ejemplo: https://ejemplo.com/voice
+    )
+    print(f"Llamada iniciada. SID: {call.sid}")
 
 @with_db_connection
 def routine(db):
@@ -107,6 +123,7 @@ def routine(db):
             
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
                 tmp_list.insert(phone, 20)
+                call_to_phone(message, phone)
                 logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}")
         
         db.mark_as_process("mensaje_llamada_por_robo", msg_id)

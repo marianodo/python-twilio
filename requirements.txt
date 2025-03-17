@@ -3,3 +3,4 @@ mysql-connector-python==8.0.5
 requests==2.25.0
 Flask
 gunicorn
+twilio==9.4.6
