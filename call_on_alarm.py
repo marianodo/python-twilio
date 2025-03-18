@@ -16,6 +16,7 @@ DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_DATABASE = os.getenv("DB_DATABASE")
 TOKEN = os.getenv("TOKEN")
 SLEEP = int(os.getenv("SLEEP", "60"))
+TIME_BETWEEN_CALL = int(os.getenv("TIME_BETWEEN_CALL", "60"))
 ACCOUNT_SID = os.getenv("ACCOUNT_SID")
 TWILIO_TOKEN = os.getenv("TWILIO_TOKEN")
 TWILIO_NUMBER = os.getenv("TWILIO_NUMBER")
@@ -135,7 +136,7 @@ def routine(db):
             print(message, name)
             
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
-                tmp_list.insert(phone, 20)
+                tmp_list.insert(phone, TIME_BETWEEN_CALL)
                 call_to_phone(message, phone)
                 logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}. Mensaje: {message}")
         
