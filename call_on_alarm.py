@@ -138,7 +138,7 @@ def routine(db):
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
                 tmp_list.insert(client, TIME_BETWEEN_CALL)
                 call_to_phone(message, phone)
-                logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}. Mensaje: {message}")
+                logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}. Mensaje: {remove_non_alphanumeric(message)}")
         
         db.mark_as_process("mensaje_llamada_por_robo", msg_id)
     
