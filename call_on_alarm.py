@@ -136,7 +136,7 @@ def routine(db):
             print(message, name)
             
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
-                tmp_list.insert(phone, TIME_BETWEEN_CALL)
+                tmp_list.insert(client, TIME_BETWEEN_CALL)
                 call_to_phone(message, phone)
                 logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}. Mensaje: {message}")
         
