@@ -75,6 +75,18 @@ def is_event_to_call(event: str, msg: str) -> bool:
     return bool(re.search(event, msg.lower()))
 
 
+def remove_non_alphanumeric(input_string):
+  """Removes any character from a string that is not a letter, number, or space.
+
+  Args:
+    input_string: The string to process.
+
+  Returns:
+    The string with only letters, numbers, and spaces.
+  """
+  return re.sub(r'[^a-zA-Z0-9\s]', '', input_string)
+
+
 def with_db_connection(func):
     """
     Decorador para abrir la conexión antes de ejecutar la función
@@ -94,14 +106,15 @@ def with_db_connection(func):
     return wrapper
 
 def call_to_phone(message, phone):
-    mensaje = f"Este es un mensaje de integralcom. {message}"
-    mensaje_codificado = requests.utils.quote(mensaje)
+    message = remove_non_alphanumeric(message)
+    message = f"Este es un mensaje de integralcom. {message}"
+    message = requests.utils.quote(message)
 
     client = Client(ACCOUNT_SID, TWILIO_TOKEN)
     call = client.calls.create(
         to=phone,
         from_=TWILIO_NUMBER,
-        url=f'{TWILIO_IVR}{mensaje_codificado}' #Ejemplo: https://ejemplo.com/voice
+        url=f'{TWILIO_IVR}{message}' #Ejemplo: https://ejemplo.com/voice
     )
     print(f"Llamada iniciada. SID: {call.sid}")
 
@@ -124,15 +137,13 @@ def routine(db):
             if client not in tmp_list.get_list() and is_event_to_call(event, message):
                 tmp_list.insert(phone, 20)
                 call_to_phone(message, phone)
-                logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}")
+                logger.info(f"ALARMA: LLAMAR AL TELEFONO {phone} por el evento {event}. Mensaje: {message}")
         
         db.mark_as_process("mensaje_llamada_por_robo", msg_id)
     
     tmp_list.clean()
 
         
-
-
 
 def send_message_to_phone(db, phone, message):
     """
