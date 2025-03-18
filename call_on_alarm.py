@@ -85,7 +85,12 @@ def remove_non_alphanumeric(input_string):
   Returns:
     The string with only letters, numbers, and spaces.
   """
-  return re.sub(r'[^a-zA-Z0-9\s]', '', input_string)
+  alphanumeric_string = re.sub(r'[^a-zA-Z0-9\s]', '', input_string)
+
+  # Remove extra spaces
+  single_space_string = re.sub(r'\s+', ' ', alphanumeric_string).strip()
+
+  return single_space_string
 
 
 def with_db_connection(func):
