@@ -16,6 +16,7 @@ DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_DATABASE = os.getenv("DB_DATABASE")
 TOKEN = os.getenv("TOKEN")
 SLEEP = int(os.getenv("SLEEP", "60"))
+REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
 TIME_BETWEEN_CALL = int(os.getenv("TIME_BETWEEN_CALL", "60"))
 ACCOUNT_SID = os.getenv("ACCOUNT_SID")
 TWILIO_TOKEN = os.getenv("TWILIO_TOKEN")
@@ -173,10 +174,13 @@ def send_message_to_phone(db, phone, message):
 
 
 if __name__ == '__main__':
-    while True:
+    i = 0
+    logger.exception(f"Starting")
+    while i < REBOOT_AFTER_ATTEMPS :
         try:
             routine()
         except Exception as e:
             logger.exception(f"Error en la ejecución principal: {e}")
 
         time.sleep(SLEEP)
+        i =+ 1
