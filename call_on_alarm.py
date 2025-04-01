@@ -184,4 +184,4 @@ if __name__ == '__main__':
 
         time.sleep(SLEEP)
         logger.info(f"{i} {REBOOT_AFTER_ATTEMPS}")
-        i =+ 1
+        i += 1
