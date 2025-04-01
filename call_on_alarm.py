@@ -182,6 +182,6 @@ if __name__ == '__main__':
         except Exception as e:
             logger.exception(f"Error en la ejecución principal: {e}")
 
-        time.sleep(SLEEP, REBOOT_AFTER_ATTEMPS)
-        logger.info(i)
+        time.sleep(SLEEP)
+        logger.info(f"{i} {REBOOT_AFTER_ATTEMPS}")
         i =+ 1
