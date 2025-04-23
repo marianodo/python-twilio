@@ -67,7 +67,7 @@ def routine(db):
         logger.info(f"Mesanje: {msg}")
         msg_id, message, _, code_cli, _, _, _ = msg
 
-        phones = db.get_phone_from_code(code_cli)
+        phones = db.get_phone_from_code(code_cli)[0]
         if not phones:
             logger.warning(f"No hay teléfonos registrados para el cliente {code_cli}. Marcando como enviado.")
             db.mark_as_sent(msg_id)
