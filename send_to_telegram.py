@@ -99,7 +99,7 @@ def send_message_to_phone(db, phone, message):
     """
     last_num_phone = phone[-7:]
     chat_id = db.get_chat_id(last_num_phone)
-
+    logger.info(chat_id)
     if chat_id:
         url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
         response = requests.get(url)
