@@ -114,10 +114,13 @@ def send_message_to_phone(db, phone, message):
 
 
 if __name__ == '__main__':
-    while True:
+    i = 0
+    logger.info(f"Starting")
+    while i < REBOOT_AFTER_ATTEMPS :
         try:
             routine()
         except Exception as e:
             logger.exception(f"Error en la ejecución principal: {e}")
 
         time.sleep(SLEEP)
+        i += 1

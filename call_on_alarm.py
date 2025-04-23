@@ -183,5 +183,4 @@ if __name__ == '__main__':
             logger.exception(f"Error en la ejecución principal: {e}")
 
         time.sleep(SLEEP)
-        logger.info(f"{i} {REBOOT_AFTER_ATTEMPS}")
         i += 1
