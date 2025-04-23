@@ -13,6 +13,7 @@ DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_DATABASE = os.getenv("DB_DATABASE")
 TOKEN = os.getenv("TOKEN")
 SLEEP = int(os.getenv("SLEEP", "60"))
+REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
 
 API = f"https://api.telegram.org/bot{TOKEN}"
 
