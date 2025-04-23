@@ -97,22 +97,25 @@ def send_message_to_phone(db, phone, message):
     """
     Envía un mensaje a un teléfono específico usando la API de Telegram.
     """
-    last_num_phone = phone[-7:]
-    chat_id = db.get_chat_id(last_num_phone)
-    logger.info(chat_id)
-    if chat_id:
-        chat_id = chat_id[0]
-        url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
-        response = requests.get(url)
+    try:
+        last_num_phone = phone[-7:]
+        chat_id = db.get_chat_id(last_num_phone)
+        logger.info(chat_id)
+        if chat_id:
+            chat_id = chat_id[0]
+            url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
+            response = requests.get(url)
 
-        if response.status_code == 200:
-            return True, ""
+            if response.status_code == 200:
+                return True, ""
+            else:
+                error = f"Error al enviar mensaje a {phone}: Código {response.status_code}, Respuesta: {response.text}"
+                return False, error
         else:
-            error = f"Error al enviar mensaje a {phone}: Código {response.status_code}, Respuesta: {response.text}"
+            error = f"Teléfono {phone} no está registrado en la DB."
             return False, error
-    else:
-        error = f"Teléfono {phone} no está registrado en la DB."
-        return False, error
+    except Exception as e:
+        return False, e
 
 
 if __name__ == '__main__':
