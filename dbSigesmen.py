@@ -54,7 +54,7 @@ class Database(object):
         self.__session.execute(query)
         result = self.__session.fetchone()
         
-        return result[0] if result else []
+        return result
 
     def __selectAll(self, query):
         self.__session.execute(query)
@@ -71,6 +71,11 @@ class Database(object):
     def mark_as_sent(self, client_id):
         self.__session.execute(MARK_AS_SENT.format(client_id))
         self.__connection.commit()
+    
+    def mark_as_process(self, table, id):
+        query = f"UPDATE {table} SET men_status = 1 WHERE id = {id}"
+        self.__session.execute(query)
+        self.__connection.commit()
 
     def insert_obs(self, obs):
         self.__session.execute(INSERT_OBS.format(obs))
@@ -78,9 +83,12 @@ class Database(object):
 
     def getClaimId(self, messageId):
         return self.__selectOneRow(GET_CLAIM_ID.format(messageId))
+    
+    def get_one_row(self, query):
+        return self.__selectOneRow(query)
         
-    def get_unsent(self):
-        return self.__selectAll(GET_UNSENT)
+    def get_unsent(self, query):
+        return self.__selectAll(query)
 
     def get_phone_from_code(self, code):
         return self.__selectOneRow(GET_CLIENT_PHONE.format(code))
