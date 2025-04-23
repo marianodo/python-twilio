@@ -98,9 +98,10 @@ def send_message_to_phone(db, phone, message):
     Envía un mensaje a un teléfono específico usando la API de Telegram.
     """
     last_num_phone = phone[-7:]
-    chat_id = db.get_chat_id(last_num_phone)[0]
+    chat_id = db.get_chat_id(last_num_phone)
     logger.info(chat_id)
     if chat_id:
+        chat_id = chat_id[0]
         url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
         response = requests.get(url)
 
