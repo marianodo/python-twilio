@@ -72,7 +72,7 @@ def routine(db):
             logger.warning(f"No hay teléfonos registrados para el cliente {code_cli}. Marcando como enviado.")
             db.mark_as_sent(msg_id)
             continue
-
+        logger.info(phones)
         phones_list = [phone.strip() for phone in phones.split(";")]
         logger.info(f"Procesando mensaje para cliente {code_cli}: {message}")
 
