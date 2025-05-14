@@ -5,6 +5,9 @@ import time
 from dbSigesmen import Database
 import json
 import traceback
+from flask import Flask, jsonify
+
+app = Flask(__name__)
 
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
@@ -118,14 +121,21 @@ def send_message_to_phone(db, phone, message):
         return False, e
 
 
+@app.route("/health", methods=['GET'])
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
 if __name__ == '__main__':
-    i = 0
-    logger.info(f"Starting")
-    while i < REBOOT_AFTER_ATTEMPS :
+    # Inicia el servidor Flask en un hilo separado para no bloquear la tarea principal
+    from threading import Thread
+    thread = Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 8080, 'debug': False, 'use_reloader': False})
+    thread.daemon = True  # Para que el hilo se cierre cuando el programa principal termine
+    thread.start()
+
+    # Mantén el script principal en ejecución para que el servidor Flask siga activo
+    while True:
+        time.sleep(SLEEP) # Duerme por 1 minuto (o el intervalo de ejecución deseado)
         try:
             routine()
         except Exception as e:
             logger.exception(f"Error en la ejecución principal: {e}")
-
-        time.sleep(SLEEP)
-        i += 1
