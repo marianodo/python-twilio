@@ -102,7 +102,7 @@ def routine(db):
         logger.info("Marcando como enviado......OK")
         if not all_sent:
             logger.warning(f"El mensaje {msg_id} no fue enviado correctamente a todos los destinatarios.")
-        logger.info("Fin Rutina")
+    logger.info("Fin Rutina")
 
 
 
