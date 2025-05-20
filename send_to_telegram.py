@@ -62,20 +62,25 @@ def with_db_connection(func):
 
 @with_db_connection
 def routine(db):
+    logger.info("Starting routine")
+    logger.info("Leyendo mensajes no enviados")
     query = "SELECT * FROM mensaje_a_telegram WHERE men_status = 0"
     unsent_messages = db.get_unsent(query)
+    logger.info("Leyendo mensajes no enviados....OK")
     logger.info(f"Total mensajes sin enviar: {len(unsent_messages)}")
     
     for msg in unsent_messages:
         logger.info(f"Mesanje: {msg}")
         msg_id, message, _, code_cli, _, _, _, _ = msg
-
+        logger.info("Obteniendo telefonos")
         phones = db.get_phone_from_code(code_cli)[0]
+        logger.info("Obteniendo telefonos....OK")
         if not phones:
             logger.warning(f"No hay teléfonos registrados para el cliente {code_cli}. Marcando como enviado.")
             db.mark_as_sent(msg_id)
+            logger.info("Marcanto telefonos no registrados....OK")
             continue
-        logger.info(phones)
+        logger.info(f"Telefonos: {phones}")
         phones_list = [phone.strip() for phone in phones.split(";")]
         logger.info(f"Procesando mensaje para cliente {code_cli}: {message}")
 
@@ -84,15 +89,20 @@ def routine(db):
         for phone in phones_list:
             logger.info(f"Enviando mensaje a {phone}...")
             success, obs = send_message_to_phone(db, phone, message)
+            logger.info("Enviando mensaje...OK")
 
             if not success:
                 logger.error(f"No se pudo enviar mensaje a {phone}: {obs}")
                 db.insert_obs(obs)
+                logger.error("No se puedo enviar mensaje....OK")
                 all_sent = False
 
+        logger.info("Marcando como enviado")
         db.mark_as_sent(msg_id)
+        logger.info("Marcando como enviado......OK")
         if not all_sent:
             logger.warning(f"El mensaje {msg_id} no fue enviado correctamente a todos los destinatarios.")
+        logger.info("Fin Rutina")
 
 
 
@@ -123,8 +133,11 @@ def send_message_to_phone(db, phone, message):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    TEST_COUNT += 1
-    status = 200 if TEST_COUNT < 5 else 404
+    try:
+        TEST_COUNT += 1
+        status = 200 if TEST_COUNT < 5 else 404
+    exception Exception as e:
+        logger.error(e)
     return jsonify({"status": "ok"}), status
 
 if __name__ == '__main__':
