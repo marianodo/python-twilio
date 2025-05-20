@@ -136,7 +136,7 @@ def health_check():
     try:
         TEST_COUNT += 1
         status = 200 if TEST_COUNT < 5 else 404
-    exception Exception as e:
+    except Exception as e:
         logger.error(e)
     return jsonify({"status": "ok"}), status
 
