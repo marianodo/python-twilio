@@ -8,7 +8,7 @@ import traceback
 from flask import Flask, jsonify
 
 app = Flask(__name__)
-
+TEST_COUNT = 0
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
@@ -123,7 +123,9 @@ def send_message_to_phone(db, phone, message):
 
 @app.route("/health", methods=['GET'])
 def health_check():
-    return jsonify({"status": "ok"}), 200
+    TEST_COUNT += 1
+    status = 200 if TEST_COUNT < 5 else 404
+    return jsonify({"status": "ok"}), status
 
 if __name__ == '__main__':
     # Inicia el servidor Flask en un hilo separado para no bloquear la tarea principal
@@ -136,6 +138,7 @@ if __name__ == '__main__':
     while True:
         time.sleep(SLEEP) # Duerme por 1 minuto (o el intervalo de ejecución deseado)
         try:
+            logger.info(f"STATUS: {TEST_COUNT}")
             routine()
         except Exception as e:
             logger.exception(f"Error en la ejecución principal: {e}")
