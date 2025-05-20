@@ -134,6 +134,7 @@ def send_message_to_phone(db, phone, message):
 @app.route("/health", methods=['GET'])
 def health_check():
     try:
+        global TEST_COUNT
         TEST_COUNT += 1
         status = 200 if TEST_COUNT < 5 else 404
     except Exception as e:
