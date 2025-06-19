@@ -2,20 +2,27 @@ import os
 import logging
 import requests
 import time
+import signal
+import sys
 from dbSigesmen import Database
 import json
 import traceback
 from flask import Flask, jsonify
+from threading import Thread, Timer
+from datetime import datetime
 
 app = Flask(__name__)
 TEST_COUNT = 0
+LAST_SUCCESSFUL_RUN = datetime.now()
+WATCHDOG_TIMEOUT = 300  # 5 minutos sin actividad exitosa desencadena reinicio
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_HOST = os.getenv("DB_HOST")
 DB_PORT = int(os.getenv("DB_PORT", 3306))
 DB_DATABASE = os.getenv("DB_DATABASE")
 TOKEN = os.getenv("TOKEN")
-SLEEP = int(os.getenv("SLEEP", "60"))
+SLEEP = int(os.getenv("SLEEP", "10"))  # Cambiado a 10 segundos por defecto
+REQUEST_TIMEOUT = 30  # Timeout para peticiones HTTP en segundos
 REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
 
 API = f"https://api.telegram.org/bot{TOKEN}"
@@ -62,47 +69,95 @@ def with_db_connection(func):
 
 @with_db_connection
 def routine(db):
-    logger.info("Starting routine")
-    logger.info("Leyendo mensajes no enviados")
-    query = "SELECT * FROM mensaje_a_telegram WHERE men_status = 0"
-    unsent_messages = db.get_unsent(query)
-    logger.info("Leyendo mensajes no enviados....OK")
-    logger.info(f"Total mensajes sin enviar: {len(unsent_messages)}")
+    """Rutina principal que lee mensajes no enviados y los envía"""
+    try:
+        logger.info("Iniciando rutina de procesamiento de mensajes")
+        start_time = time.time()
+        
+        # Recuperar mensajes no enviados con un límite para evitar sobrecarga
+        query = "SELECT * FROM mensaje_a_telegram WHERE men_status = 0 LIMIT 100"
+        unsent_messages = db.get_unsent(query)
+        
+        message_count = len(unsent_messages)
+        if message_count == 0:
+            logger.info("No hay mensajes pendientes para enviar")
+            return
+            
+        logger.info(f"Procesando {message_count} mensajes pendientes")
+        
+        messages_processed = 0
+        messages_sent = 0
+        messages_failed = 0
+        
+        for msg in unsent_messages:
+            try:
+                msg_id, message, _, code_cli, _, _, _, _ = msg
+                logger.info(f"Procesando mensaje ID {msg_id} para cliente {code_cli}")
+                
+                # Obtener teléfonos del cliente
+                phones_result = db.get_phone_from_code(code_cli)
+                
+                if not phones_result or not phones_result[0]:
+                    logger.warning(f"No hay teléfonos registrados para el cliente {code_cli}. Marcando mensaje como enviado.")
+                    db.mark_as_sent(msg_id)
+                    messages_processed += 1
+                    continue
+                
+                phones = phones_result[0]
+                phones_list = [phone.strip() for phone in phones.split(";") if phone.strip()]
+                logger.info(f"Encontrados {len(phones_list)} teléfonos para el cliente {code_cli}")
+                
+                all_sent = True
+                phones_sent = 0
+                phones_failed = 0
+
+                for phone in phones_list:
+                    try:
+                        success, obs = send_message_to_phone(db, phone, message)
+                        
+                        if success:
+                            phones_sent += 1
+                        else:
+                            phones_failed += 1
+                            all_sent = False
+                            # Guardar observación de error
+                            if isinstance(obs, Exception):
+                                obs_text = str(obs)
+                            else:
+                                obs_text = obs
+                            db.insert_obs(obs_text[:500])  # Limitar longitud para evitar problemas
+                    except Exception as phone_error:
+                        logger.exception(f"Error al procesar teléfono {phone}: {str(phone_error)}")
+                        phones_failed += 1
+                        all_sent = False
+
+                # Marcar el mensaje como enviado independientemente de los resultados
+                db.mark_as_sent(msg_id)
+                messages_processed += 1
+                
+                if all_sent:
+                    messages_sent += 1
+                    logger.info(f"Mensaje {msg_id} enviado correctamente a {phones_sent} teléfonos")
+                else:
+                    messages_failed += 1
+                    logger.warning(f"Mensaje {msg_id}: {phones_sent} enviados, {phones_failed} fallidos")
+            
+            except Exception as msg_error:
+                logger.exception(f"Error al procesar mensaje {msg}: {str(msg_error)}")
+                # Intentar marcar como enviado para evitar reprocesamiento infinito
+                try:
+                    db.mark_as_sent(msg_id)
+                except Exception:
+                    pass
+                messages_failed += 1
+        
+        # Resumen de la ejecución
+        execution_time = time.time() - start_time
+        logger.info(f"Rutina completada en {execution_time:.2f} segundos. Procesados: {messages_processed}, Exitosos: {messages_sent}, Fallidos: {messages_failed}")
     
-    for msg in unsent_messages:
-        logger.info(f"Mesanje: {msg}")
-        msg_id, message, _, code_cli, _, _, _, _ = msg
-        logger.info("Obteniendo telefonos")
-        phones = db.get_phone_from_code(code_cli)[0]
-        logger.info("Obteniendo telefonos....OK")
-        if not phones:
-            logger.warning(f"No hay teléfonos registrados para el cliente {code_cli}. Marcando como enviado.")
-            db.mark_as_sent(msg_id)
-            logger.info("Marcanto telefonos no registrados....OK")
-            continue
-        logger.info(f"Telefonos: {phones}")
-        phones_list = [phone.strip() for phone in phones.split(";")]
-        logger.info(f"Procesando mensaje para cliente {code_cli}: {message}")
-
-        all_sent = True
-
-        for phone in phones_list:
-            logger.info(f"Enviando mensaje a {phone}...")
-            success, obs = send_message_to_phone(db, phone, message)
-            logger.info("Enviando mensaje...OK")
-
-            if not success:
-                logger.error(f"No se pudo enviar mensaje a {phone}: {obs}")
-                db.insert_obs(obs)
-                logger.error("No se puedo enviar mensaje....OK")
-                all_sent = False
-
-        logger.info("Marcando como enviado")
-        db.mark_as_sent(msg_id)
-        logger.info("Marcando como enviado......OK")
-        if not all_sent:
-            logger.warning(f"El mensaje {msg_id} no fue enviado correctamente a todos los destinatarios.")
-    logger.info("Fin Rutina")
+    except Exception as routine_error:
+        logger.exception(f"Error general en la rutina: {str(routine_error)}")
+        raise  # Re-lanzamos la excepción para que se maneje en el bucle principal
 
 
 
@@ -111,48 +166,141 @@ def send_message_to_phone(db, phone, message):
     Envía un mensaje a un teléfono específico usando la API de Telegram.
     """
     try:
+        # Validar que el teléfono tenga al menos 7 dígitos
+        if not phone or len(phone) < 7:
+            error = f"Teléfono inválido: {phone}"
+            logger.error(error)
+            return False, error
+
         last_num_phone = phone[-7:]
         chat_id = db.get_chat_id(last_num_phone)
-        logger.info(chat_id)
+        logger.info(f"Buscando chat_id para teléfono terminado en {last_num_phone}: {chat_id}")
+        
         if chat_id:
             chat_id = chat_id[0]
             url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
-            response = requests.get(url)
+            # Agregar timeout para evitar que las peticiones se queden colgadas
+            response = requests.get(url, timeout=REQUEST_TIMEOUT)
 
             if response.status_code == 200:
+                logger.info(f"Mensaje enviado exitosamente a {phone}")
                 return True, ""
             else:
                 error = f"Error al enviar mensaje a {phone}: Código {response.status_code}, Respuesta: {response.text}"
+                logger.error(error)
                 return False, error
         else:
             error = f"Teléfono {phone} no está registrado en la DB."
+            logger.warning(error)
             return False, error
+    except requests.Timeout:
+        error = f"Timeout al enviar mensaje a {phone}"
+        logger.error(error)
+        return False, error
     except Exception as e:
-        return False, e
+        error = f"Error inesperado al enviar mensaje a {phone}: {str(e)}"
+        logger.error(error, exc_info=True)
+        return False, error
 
 
 @app.route("/health", methods=['GET'])
 def health_check():
     try:
+        # Comprueba si el programa está funcionando correctamente
+        # Calcula tiempo desde la última ejecución exitosa
+        time_since_last_success = (datetime.now() - LAST_SUCCESSFUL_RUN).total_seconds()
+        
+        # Si han pasado más de 5 minutos desde la última ejecución exitosa, considera que hay un problema
+        if time_since_last_success > WATCHDOG_TIMEOUT:
+            logger.warning(f"Health check: El servicio lleva {time_since_last_success} segundos sin una ejecución exitosa")
+            return jsonify({
+                "status": "warning",
+                "last_success": LAST_SUCCESSFUL_RUN.isoformat(),
+                "seconds_since_success": time_since_last_success
+            }), 200  # Seguimos devolviendo 200 para no reiniciar el servicio automáticamente
+        
+        # Para pruebas, mantenemos el contador
         global TEST_COUNT
         TEST_COUNT += 1
-        status = 200 if TEST_COUNT < 5 else 404
+        
+        return jsonify({
+            "status": "ok",
+            "last_success": LAST_SUCCESSFUL_RUN.isoformat(),
+            "seconds_since_success": time_since_last_success
+        }), 200
     except Exception as e:
-        logger.error(e)
-    return jsonify({"status": "ok"}), status
+        logger.error(f"Error en health check: {str(e)}", exc_info=True)
+        return jsonify({"status": "error", "error": str(e)}), 500
+
+def watchdog_check():
+    """Comprueba si el programa está funcionando correctamente y lo reinicia si es necesario"""
+    global LAST_SUCCESSFUL_RUN
+    time_since_last_success = (datetime.now() - LAST_SUCCESSFUL_RUN).total_seconds()
+    
+    if time_since_last_success > WATCHDOG_TIMEOUT:
+        logger.critical(f"¡WATCHDOG ACTIVADO! Han pasado {time_since_last_success} segundos desde la última ejecución exitosa. Reiniciando...")
+        # En un entorno real, este es el punto donde reiniciaríamos el proceso
+        # En Railway, podemos salir con un código de error para que el sistema nos reinicie
+        os._exit(1)  # Fuerza la salida del proceso
+    
+    # Programa la próxima verificación
+    timer = Timer(60, watchdog_check)  # Comprobar cada minuto
+    timer.daemon = True
+    timer.start()
+
+# Maneja señales de terminación para limpieza
+def signal_handler(sig, frame):
+    logger.info("Señal de terminación recibida. Limpiando recursos...")
+    # Aquí podríamos realizar tareas de limpieza si fuera necesario
+    sys.exit(0)
 
 if __name__ == '__main__':
-    # Inicia el servidor Flask en un hilo separado para no bloquear la tarea principal
-    from threading import Thread
-    thread = Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 8080, 'debug': False, 'use_reloader': False})
-    thread.daemon = True  # Para que el hilo se cierre cuando el programa principal termine
-    thread.start()
-
-    # Mantén el script principal en ejecución para que el servidor Flask siga activo
+    # Configura manejadores de señales
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+    
+    # Inicia el servidor Flask en un hilo separado
+    flask_thread = Thread(target=app.run, kwargs={'host': '0.0.0.0', 'port': 8080, 'debug': False, 'use_reloader': False})
+    flask_thread.daemon = True
+    flask_thread.start()
+    logger.info("Servidor Flask iniciado")
+    
+    # Inicia el watchdog
+    watchdog_thread = Thread(target=watchdog_check)
+    watchdog_thread.daemon = True
+    watchdog_thread.start()
+    logger.info("Watchdog iniciado")
+    
+    # Bucle principal mejorado
+    consecutive_errors = 0
+    max_consecutive_errors = 5
+    
+    logger.info(f"Iniciando bucle principal con intervalo de {SLEEP} segundos")
     while True:
-        time.sleep(SLEEP) # Duerme por 1 minuto (o el intervalo de ejecución deseado)
         try:
-            logger.info(f"STATUS: {TEST_COUNT}")
+            start_time = time.time()
+            logger.info(f"Ejecutando rutina de verificación de mensajes...")
             routine()
+            
+            # Actualiza el timestamp de última ejecución exitosa
+            LAST_SUCCESSFUL_RUN = datetime.now()
+            consecutive_errors = 0  # Reinicia el contador de errores
+            
+            # Calcula el tiempo que tomó la ejecución
+            execution_time = time.time() - start_time
+            logger.info(f"Rutina completada en {execution_time:.2f} segundos")
+            
+            # Asegura un intervalo constante ajustando el tiempo de espera
+            sleep_time = max(0.1, SLEEP - execution_time)  # Al menos 0.1 segundos
+            time.sleep(sleep_time)
+            
         except Exception as e:
-            logger.exception(f"Error en la ejecución principal: {e}")
+            consecutive_errors += 1
+            logger.exception(f"Error en la ejecución principal ({consecutive_errors}/{max_consecutive_errors}): {e}")
+            
+            if consecutive_errors >= max_consecutive_errors:
+                logger.critical(f"Demasiados errores consecutivos ({consecutive_errors}). Reiniciando el servicio...")
+                os._exit(1)  # Fuerza reinicio
+                
+            # Espera antes de reintentar tras un error
+            time.sleep(SLEEP)
