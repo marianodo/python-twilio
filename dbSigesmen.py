@@ -33,9 +33,11 @@ class Database(object):
                     user=self.__user,
                     passwd=self.__password,
                     db=self.__database,
-                    port=self.__port
+                    port=self.__port,
+                    buffered=True,  # Usar cursor buffered para evitar "Unread result found"
+                    autocommit=False  # Control manual de transacciones
                 )
-                self.__session = self.__connection.cursor()
+                self.__session = self.__connection.cursor(buffered=True)
                 return
             except MySQLdb.Error as e:
                 print(f"Intento {attempt+1} - Error conectando a MySQL: {e}")
@@ -51,77 +53,63 @@ class Database(object):
             self.__connection.close()
     
     def __selectOneRow(self, query):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-        
-        self.__session.execute(query)
-        result = self.__session.fetchone()
-        
-        return result
+            self.__session.execute(query)
+            result = self.__session.fetchone()
+            return result
+        except MySQLdb.Error as e:
+            print(f"Error en __selectOneRow: {e}")
+            raise
 
     def __selectAll(self, query):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        self.__session.execute(query)
-        return self.__session.fetchall()
+            self.__session.execute(query)
+            result = self.__session.fetchall()
+            return result
+        except MySQLdb.Error as e:
+            print(f"Error en __selectAll: {e}")
+            raise
 
     def isCodeExists(self, code):
         return self.__selectOneRow(GET_CLIENT.format(code))
 
     def sendMessage(self, code, message):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        self.__session.execute(INSERT_MESSAGE.format(code, message))
-        self.__connection.commit()
-        return self.__session.lastrowid
+            self.__session.execute(INSERT_MESSAGE.format(code, message))
+            self.__connection.commit()
+            return self.__session.lastrowid
+        except MySQLdb.Error as e:
+            print(f"Error en sendMessage: {e}")
+            self.__connection.rollback()
+            raise
 
     def mark_as_sent(self, client_id):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        self.__session.execute(MARK_AS_SENT.format(client_id))
-        self.__connection.commit()
+            self.__session.execute(MARK_AS_SENT.format(client_id))
+            self.__connection.commit()
+        except MySQLdb.Error as e:
+            print(f"Error en mark_as_sent: {e}")
+            self.__connection.rollback()
+            raise
     
     def mark_as_process(self, table, id):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        query = f"UPDATE {table} SET men_status = 1 WHERE id = {id}"
-        self.__session.execute(query)
-        self.__connection.commit()
+            query = f"UPDATE {table} SET men_status = 1 WHERE id = {id}"
+            self.__session.execute(query)
+            self.__connection.commit()
+        except MySQLdb.Error as e:
+            print(f"Error en mark_as_process: {e}")
+            self.__connection.rollback()
+            raise
 
     def insert_obs(self, obs):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        self.__session.execute(INSERT_OBS.format(obs))
-        self.__connection.commit()
+            self.__session.execute(INSERT_OBS.format(obs))
+            self.__connection.commit()
+        except MySQLdb.Error as e:
+            print(f"Error en insert_obs: {e}")
+            self.__connection.rollback()
+            raise
 
     def getClaimId(self, messageId):
         return self.__selectOneRow(GET_CLAIM_ID.format(messageId))
@@ -136,32 +124,27 @@ class Database(object):
         return self.__selectOneRow(GET_CLIENT_PHONE.format(code))
 
     def insert_chat_id(self, phone, chat_id):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        value = self.get_chat_id(phone)
-        if value:
-            self.update_chat_id(phone, chat_id)
-        else:
-            self.__session.execute(INSERT_CHAT_ID.format(phone, chat_id))
-            self.__connection.commit()
-
-        return self.__session.lastrowid
+            value = self.get_chat_id(phone)
+            if value:
+                self.update_chat_id(phone, chat_id)
+            else:
+                self.__session.execute(INSERT_CHAT_ID.format(phone, chat_id))
+                self.__connection.commit()
+            return self.__session.lastrowid
+        except MySQLdb.Error as e:
+            print(f"Error en insert_chat_id: {e}")
+            self.__connection.rollback()
+            raise
 
     def update_chat_id(self, phone, chat_id):
-        # Limpiar resultados no leídos antes de ejecutar nueva consulta
         try:
-            while self.__session.nextset():
-                pass
-        except:
-            pass
-            
-        self.__session.execute(UPDATE_CHAT_ID.format(chat_id, phone))
-        self.__connection.commit()
+            self.__session.execute(UPDATE_CHAT_ID.format(chat_id, phone))
+            self.__connection.commit()
+        except MySQLdb.Error as e:
+            print(f"Error en update_chat_id: {e}")
+            self.__connection.rollback()
+            raise
     
     def get_chat_id(self, phone):
         return self.__selectOneRow(GET_CHAT_ID.format(phone))
@@ -173,8 +156,20 @@ class Database(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         """Para usar con 'with'. Maneja commit/rollback."""
-        if exc_type is not None:
-            self.__connection.rollback()
-        else:
-            self.__connection.commit()
-        self.close()
+        try:
+            if exc_type is not None:
+                if self.__connection:
+                    self.__connection.rollback()
+            else:
+                if self.__connection:
+                    self.__connection.commit()
+        except Exception as e:
+            print(f"Error en __exit__: {e}")
+            # Si falla el commit/rollback, intentar rollback como último recurso
+            try:
+                if self.__connection:
+                    self.__connection.rollback()
+            except:
+                pass
+        finally:
+            self.close()
