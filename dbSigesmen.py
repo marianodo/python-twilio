@@ -51,12 +51,26 @@ class Database(object):
             self.__connection.close()
     
     def __selectOneRow(self, query):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+        
         self.__session.execute(query)
         result = self.__session.fetchone()
         
         return result
 
     def __selectAll(self, query):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         self.__session.execute(query)
         return self.__session.fetchall()
 
@@ -64,20 +78,48 @@ class Database(object):
         return self.__selectOneRow(GET_CLIENT.format(code))
 
     def sendMessage(self, code, message):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         self.__session.execute(INSERT_MESSAGE.format(code, message))
         self.__connection.commit()
         return self.__session.lastrowid
 
     def mark_as_sent(self, client_id):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         self.__session.execute(MARK_AS_SENT.format(client_id))
         self.__connection.commit()
     
     def mark_as_process(self, table, id):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         query = f"UPDATE {table} SET men_status = 1 WHERE id = {id}"
         self.__session.execute(query)
         self.__connection.commit()
 
     def insert_obs(self, obs):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         self.__session.execute(INSERT_OBS.format(obs))
         self.__connection.commit()
 
@@ -94,6 +136,13 @@ class Database(object):
         return self.__selectOneRow(GET_CLIENT_PHONE.format(code))
 
     def insert_chat_id(self, phone, chat_id):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         value = self.get_chat_id(phone)
         if value:
             self.update_chat_id(phone, chat_id)
@@ -104,6 +153,13 @@ class Database(object):
         return self.__session.lastrowid
 
     def update_chat_id(self, phone, chat_id):
+        # Limpiar resultados no leídos antes de ejecutar nueva consulta
+        try:
+            while self.__session.nextset():
+                pass
+        except:
+            pass
+            
         self.__session.execute(UPDATE_CHAT_ID.format(chat_id, phone))
         self.__connection.commit()
     
