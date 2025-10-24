@@ -100,7 +100,7 @@ def routine(db):
                 
                 if not phones_result or not phones_result[0]:
                     logger.warning(f"No hay teléfonos registrados para el cliente {code_cli}. Marcando mensaje como enviado.")
-                    db.mark_as_sent(msg_id)
+                    db.mark_as_process("mensaje_a_sms", msg_id)
                     messages_processed += 1
                     continue
                 
@@ -126,14 +126,16 @@ def routine(db):
                                 obs_text = str(obs)
                             else:
                                 obs_text = obs
-                            db.insert_obs(obs_text[:500])  # Limitar longitud para evitar problemas
+                            # Escapar comillas simples para evitar errores SQL
+                            obs_text_escaped = obs_text.replace("'", "''")[:500]
+                            db.insert_obs(obs_text_escaped)
                     except Exception as phone_error:
                         logger.exception(f"Error al procesar teléfono {phone}: {str(phone_error)}")
                         phones_failed += 1
                         all_sent = False
 
                 # Marcar el mensaje como enviado independientemente de los resultados
-                db.mark_as_sent(msg_id)
+                db.mark_as_process("mensaje_a_sms", msg_id)
                 messages_processed += 1
                 
                 if all_sent:
@@ -147,7 +149,7 @@ def routine(db):
                 logger.exception(f"Error al procesar mensaje SMS {msg}: {str(msg_error)}")
                 # Intentar marcar como enviado para evitar reprocesamiento infinito
                 try:
-                    db.mark_as_sent(msg_id)
+                    db.mark_as_process("mensaje_a_sms", msg_id)
                 except Exception:
                     pass
                 messages_failed += 1
@@ -199,8 +201,7 @@ def send_sms_to_phone(db, phone, message):
         message_obj = client.messages.create(
             body=message,
             from_=TWILIO_NUMBER,
-            to=clean_phone,
-            timeout=REQUEST_TIMEOUT
+            to=clean_phone
         )
         
         logger.info(f"SMS enviado exitosamente a {clean_phone}. SID: {message_obj.sid}")
