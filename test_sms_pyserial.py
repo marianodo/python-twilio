@@ -9,7 +9,7 @@ load_dotenv()
 
 # Configurar logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO,  # Cambiar a logging.DEBUG para ver más detalles
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -36,10 +36,15 @@ def format_phone_number(phone):
     
     return clean_phone
 
-def send_at_command(ser, command, timeout=3):
-    """Envía un comando AT y espera respuesta"""
+def send_at_command(ser, command, timeout=5):
+    """Envía un comando AT y espera respuesta completa"""
+    # Limpiar buffer de entrada antes de enviar
+    ser.reset_input_buffer()
+    
     logger.debug(f"Enviando: {command}")
     ser.write((command + '\r\n').encode('utf-8'))
+    
+    # Dar tiempo para que el módem procese
     time.sleep(0.5)
     
     response = b''
@@ -47,12 +52,25 @@ def send_at_command(ser, command, timeout=3):
     
     while time.time() - start_time < timeout:
         if ser.in_waiting:
-            response += ser.read(ser.in_waiting)
+            new_data = ser.read(ser.in_waiting)
+            response += new_data
+            
+            # Log debug de lo que recibimos
+            logger.debug(f"Recibido parcial: {new_data}")
+            
+            # Si recibimos OK o ERROR, esperar un poco más por si hay datos adicionales
             if b'OK' in response or b'ERROR' in response:
+                time.sleep(0.3)  # Esperar un poco más por datos adicionales
+                if ser.in_waiting:
+                    response += ser.read(ser.in_waiting)
                 break
+        
         time.sleep(0.1)
     
-    return response.decode('utf-8', errors='ignore').strip()
+    result = response.decode('utf-8', errors='ignore').strip()
+    logger.debug(f"Respuesta completa: {result}")
+    
+    return result
 
 def test_modem():
     """Inicializa el módem y envía un SMS de prueba usando pyserial"""
