@@ -112,27 +112,38 @@ def test_modem():
         if 'OK' not in response:
             raise Exception("No se pudo configurar modo texto")
         
-        # Enviar SMS (formato: AT+CMGS="numero")
+        # Preparar comando AT+CMGS para enviar SMS
         logger.info("Enviando SMS...")
+        logger.info("Enviando comando AT+CMGS...")
         ser.write(f'AT+CMGS="{clean_phone}"\r\n'.encode('utf-8'))
         time.sleep(1)
         
         # Esperar prompt '>'
         timeout = 10
         start_time = time.time()
+        prompt_received = False
         while time.time() - start_time < timeout:
             if ser.in_waiting:
-                data = ser.read(1)
+                data = ser.read(ser.in_waiting)
+                logger.debug(f"Recibido: {data}")
                 if b'>' in data:
+                    prompt_received = True
+                    logger.info("✅ Prompt '>' recibido, enviando mensaje...")
                     break
+            time.sleep(0.1)
         
-        # Enviar mensaje y Ctrl+Z (0x1A)
+        if not prompt_received:
+            raise Exception("Timeout esperando prompt '>' del módem")
+        
+        # Enviar mensaje y Ctrl+Z (0x1A) usando ser.write directamente
+        # porque aquí ya estamos en modo interactivo
         ser.write(TEST_MESSAGE.encode('utf-8'))
-        ser.write(b'\x1A')  # Ctrl+Z
+        ser.write(b'\x1A')  # Ctrl+Z para finalizar
         
         logger.info("Esperando confirmación del módem...")
         
-        # Esperar respuesta final
+        # Esperar respuesta final usando el método send_at_command no aplica aquí
+        # porque necesitamos leer la respuesta del +CMGS:
         response = b''
         start_time = time.time()
         while time.time() - start_time < 30:
