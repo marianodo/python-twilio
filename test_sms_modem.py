@@ -47,9 +47,41 @@ def test_modem():
         if not MODEM_PORT:
             raise ValueError("MODEM_PORT no configurado en .env")
         
-        logger.info(f"Iniciando módem en puerto {MODEM_PORT}, baudrate {MODEM_BAUDRATE}")
-        modem = GsmModem(MODEM_PORT, MODEM_BAUDRATE)
-        modem.connect(MODEM_PIN)
+        logger.info(f"Iniciando módem en puerto {MODEM_PORT}")
+        
+        # Usar baudrate configurado o autodetección
+        if MODEM_BAUDRATE:
+            logger.info(f"Usando baudrate configurado: {MODEM_BAUDRATE}")
+            modem = GsmModem(MODEM_PORT, MODEM_BAUDRATE)
+        else:
+            logger.info("Baudrate no configurado, intentando detección automática...")
+            common_baudrates = [115200, 9600, 19200, 38400, 57600]
+            modem = None
+            for baud in common_baudrates:
+                try:
+                    logger.info(f"Probando {baud} bps...")
+                    modem = GsmModem(MODEM_PORT, baud)
+                    modem.connect(MODEM_PIN)
+                    logger.info(f"✅ Módem conectado a {baud} bps")
+                    break
+                except Exception as e:
+                    logger.debug(f"No responde a {baud} bps: {e}")
+                    if modem:
+                        try:
+                            modem.close()
+                        except:
+                            pass
+                    modem = None
+                    continue
+        
+        if not modem:
+            raise Exception("No se pudo detectar el baudrate del módem")
+        
+        # Conectar solo si no se conectó en la autodetección
+        try:
+            modem.connect(MODEM_PIN)
+        except:
+            pass  # Ya está conectado
         
         # Verificar nivel de señal
         signal_strength = modem.signalStrength

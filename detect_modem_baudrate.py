@@ -35,9 +35,8 @@ def detect_baudrate():
             logger.info(f"Probando {baud} bps...")
             modem = GsmModem(MODEM_PORT, baud)
             
-            # Intentar conectar, pero sin esperar respuesta completa
-            # Solo verificamos si el módem responde
-            modem.connect(MODEM_PIN, timeout=3)
+            # Conectar con timeout corto para detección rápida
+            modem.connect(MODEM_PIN)
             
             # Si llegamos aquí, el módem respondió
             detected_baudrate = baud
@@ -46,8 +45,13 @@ def detect_baudrate():
             # Obtener información del módem
             signal = modem.signalStrength
             network = modem.networkName
-            manufacturer = modem.manufacturer
-            model = modem.model
+            
+            try:
+                manufacturer = modem.manufacturer
+                model = modem.model
+            except:
+                manufacturer = "Desconocido"
+                model = "Desconocido"
             
             logger.info("=" * 50)
             logger.info("DETECCIÓN EXITOSA")
@@ -64,7 +68,7 @@ def detect_baudrate():
             break
             
         except Exception as e:
-            logger.warning(f"  ❌ No responde a {baud} bps")
+            logger.warning(f"  ❌ No responde a {baud} bps: {str(e)}")
             if modem:
                 try:
                     modem.close()
