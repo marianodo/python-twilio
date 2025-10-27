@@ -8,8 +8,7 @@ import json
 import traceback
 import smtplib
 from email.mime.text import MIMEText
-from gsmmodem.modem import GsmModem
-from gsmmodem.exceptions import TimeoutException, CommandError
+import serial
 from threading import Timer
 from datetime import datetime
 TEST_COUNT = 0
@@ -39,7 +38,7 @@ ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO")
 SLEEP = int(os.getenv("SLEEP", "10"))  # 10 segundos por defecto
 REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
 
-# Variable global para el módem
+# Variable global para el módem (será un objeto serial.Serial)
 modem = None
 
 class JsonFormatter(logging.Formatter):
@@ -86,29 +85,70 @@ def send_alert_email(subject, body):
         logger.error(f"Error enviando email de alerta: {e}")
         return False
 
+def send_at_command(ser, command, timeout=5):
+    """Envía un comando AT y espera respuesta completa"""
+    ser.reset_input_buffer()
+    
+    ser.write((command + '\r\n').encode('utf-8'))
+    time.sleep(0.5)
+    
+    response = b''
+    start_time = time.time()
+    
+    while time.time() - start_time < timeout:
+        if ser.in_waiting:
+            new_data = ser.read(ser.in_waiting)
+            response += new_data
+            
+            if b'OK' in response or b'ERROR' in response:
+                time.sleep(0.3)
+                if ser.in_waiting:
+                    response += ser.read(ser.in_waiting)
+                break
+        
+        time.sleep(0.1)
+    
+    return response.decode('utf-8', errors='ignore').strip()
+
 def init_modem():
-    """Inicializa y conecta el módem GSM"""
+    """Inicializa y conecta el módem GSM usando pyserial"""
     global modem
     try:
         if not MODEM_PORT:
             raise ValueError("MODEM_PORT no configurado")
         
         logger.info(f"Inicializando módem en puerto {MODEM_PORT}, baudrate {MODEM_BAUDRATE}")
-        modem = GsmModem(MODEM_PORT, MODEM_BAUDRATE)
-        modem.connect(MODEM_PIN)
+        modem = serial.Serial(MODEM_PORT, MODEM_BAUDRATE, timeout=3)
+        time.sleep(2)  # Dar tiempo al módem para iniciar
+        logger.info("✅ Puerto abierto")
         
-        # Verificar nivel de señal
-        signal_strength = modem.signalStrength
-        network_name = modem.networkName
+        # Verificar que el módem responda
+        logger.info("Verificando módem (AT)...")
+        response = send_at_command(modem, 'AT')
+        logger.info(f"Respuesta: {response}")
         
-        logger.info(f"Módem conectado exitosamente. Señal: {signal_strength}, Red: {network_name}")
+        if 'OK' not in response:
+            raise Exception("El módem no responde a comandos AT")
         
-        if signal_strength < 10:
-            logger.warning(f"Señal débil detectada: {signal_strength}")
-            
+        # Verificar señal GSM
+        logger.info("Verificando señal GSM...")
+        response = send_at_command(modem, 'AT+CSQ')
+        logger.info(f"Señal: {response}")
+        
+        # Verificar red
+        logger.info("Verificando red...")
+        response = send_at_command(modem, 'AT+COPS?')
+        logger.info(f"Red: {response}")
+        
+        logger.info("✅ Módem conectado exitosamente")
         return True
     except Exception as e:
         logger.error(f"Error inicializando módem: {e}")
+        if modem:
+            try:
+                modem.close()
+            except:
+                pass
         return False
 
 def reconnect_modem(max_attempts=3):
@@ -119,8 +159,11 @@ def reconnect_modem(max_attempts=3):
     for attempt in range(max_attempts):
         try:
             if modem:
-                modem.close()
-                time.sleep(5)
+                try:
+                    modem.close()
+                except:
+                    pass
+                time.sleep(2)
             
             if init_modem():
                 logger.info("Módem reconectado exitosamente")
@@ -128,7 +171,7 @@ def reconnect_modem(max_attempts=3):
                 
         except Exception as e:
             logger.error(f"Intento {attempt+1} de reconexión falló: {e}")
-            time.sleep(10)  # Esperar más entre intentos
+            time.sleep(5)  # Esperar entre intentos
     
     # Si falla después de todos los intentos, enviar email de alerta
     error_msg = f"Módem GSM no responde después de {max_attempts} intentos de reconexión"
@@ -137,21 +180,25 @@ def reconnect_modem(max_attempts=3):
     return False
 
 def check_modem_status():
-    """Verifica el estado actual del módem"""
+    """Verifica el estado actual del módem usando pyserial"""
     global modem
     try:
-        if not modem:
-            return {"status": "disconnected", "error": "Módem no inicializado"}
+        if not modem or not modem.is_open:
+            return {"status": "disconnected", "error": "Módem no inicializado o puerto cerrado"}
         
-        signal_strength = modem.signalStrength
-        network_name = modem.networkName
+        # Intentar enviar comando AT
+        response = send_at_command(modem, 'AT', timeout=2)
         
-        status = "ok" if signal_strength >= 10 else "weak_signal"
+        if 'OK' not in response:
+            return {"status": "error", "error": "Módem no responde"}
+        
+        # Verificar señal
+        signal_response = send_at_command(modem, 'AT+CSQ', timeout=2)
         
         return {
-            "signal_strength": signal_strength,
-            "network": network_name,
-            "status": status
+            "signal_info": signal_response,
+            "network_info": "Verificado",
+            "status": "ok"
         }
     except Exception as e:
         logger.error(f"Error verificando estado del módem: {e}")
@@ -174,10 +221,10 @@ def format_phone_number(phone):
     return clean_phone
 
 def send_sms_via_modem(phone, message):
-    """Envía un SMS usando el módem GSM"""
+    """Envía un SMS usando el módem GSM con pyserial"""
     global modem
     try:
-        if not modem:
+        if not modem or not modem.is_open:
             raise Exception("Módem no inicializado")
         
         # Validar que el teléfono tenga al menos 7 dígitos
@@ -190,27 +237,61 @@ def send_sms_via_modem(phone, message):
         clean_phone = format_phone_number(phone)
         logger.info(f"Enviando SMS a {clean_phone}")
         
-        # Enviar SMS con delivery report
-        sms = modem.sendSms(clean_phone, message, waitForDeliveryReport=True)
+        # Configurar modo texto
+        response = send_at_command(modem, 'AT+CMGF=1')
+        if 'OK' not in response:
+            raise Exception("No se pudo configurar modo texto")
         
-        # Loguear confirmación de entrega
-        logger.info(f"SMS enviado exitosamente. Status: {sms.status}, Reference: {sms.reference}")
+        # Enviar SMS
+        logger.debug(f"Enviando comando AT+CMGS a {clean_phone}")
+        modem.write(f'AT+CMGS="{clean_phone}"\r\n'.encode('utf-8'))
+        time.sleep(1)
         
-        # TODO: Preparado para guardar delivery report en BD si se necesita
-        # db.save_delivery_report(sms.reference, sms.status, phone, message)
+        # Esperar prompt '>'
+        timeout = 10
+        start_time = time.time()
+        prompt_received = False
+        while time.time() - start_time < timeout:
+            if modem.in_waiting:
+                data = modem.read(modem.in_waiting)
+                if b'>' in data:
+                    prompt_received = True
+                    logger.debug("Prompt '>' recibido")
+                    break
+            time.sleep(0.1)
         
-        return True, sms.reference
+        if not prompt_received:
+            raise Exception("Timeout esperando prompt '>' del módem")
         
-    except TimeoutException:
-        error = f"Timeout enviando SMS a {phone}"
-        logger.error(error)
-        return False, error
-    except CommandError as e:
-        error = f"Error de comando AT enviando SMS a {phone}: {e}"
-        logger.error(error)
-        return False, error
+        # Enviar mensaje y Ctrl+Z (0x1A)
+        modem.write(message.encode('utf-8'))
+        modem.write(b'\x1A')  # Ctrl+Z
+        
+        # Esperar respuesta final
+        response = b''
+        start_time = time.time()
+        while time.time() - start_time < 30:
+            if modem.in_waiting:
+                response += modem.read(modem.in_waiting)
+                if b'+CMGS:' in response or b'OK' in response:
+                    break
+            time.sleep(0.5)
+        
+        result = response.decode('utf-8', errors='ignore')
+        logger.info(f"SMS enviado exitosamente. Respuesta: {result}")
+        
+        # Extraer referencia si existe
+        reference = "unknown"
+        if '+CMGS:' in result:
+            try:
+                reference = result.split('+CMGS:')[1].split('\n')[0].strip()
+            except:
+                pass
+        
+        return True, reference
+        
     except Exception as e:
-        error = f"Error inesperado enviando SMS a {phone}: {str(e)}"
+        error = f"Error enviando SMS a {phone}: {str(e)}"
         logger.error(error, exc_info=True)
         return False, error
 
@@ -387,9 +468,9 @@ def signal_handler(sig, frame):
     if modem:
         try:
             modem.close()
-            logger.info("Módem desconectado correctamente")
+            logger.info("Puerto serie cerrado correctamente")
         except Exception as e:
-            logger.error(f"Error cerrando módem: {e}")
+            logger.error(f"Error cerrando puerto serie: {e}")
     sys.exit(0)
 
 if __name__ == '__main__':
