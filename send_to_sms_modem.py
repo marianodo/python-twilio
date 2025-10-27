@@ -41,23 +41,31 @@ REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
 # Variable global para el módem (será un objeto serial.Serial)
 modem = None
 
-class JsonFormatter(logging.Formatter):
+class SimpleFormatter(logging.Formatter):
     def format(self, record):
-        log_message = {
-            "timestamp": self.formatTime(record),
-            "level": record.levelname.lower(),
-            "message": record.getMessage(),
-            "logger": record.name,
-            "line_number": record.lineno
+        # Usar colores ANSI para hacer el output más legible
+        COLORS = {
+            'DEBUG': '\033[36m',      # Cyan
+            'INFO': '\033[32m',       # Verde
+            'WARNING': '\033[33m',    # Amarillo
+            'ERROR': '\033[31m',      # Rojo
+            'CRITICAL': '\033[35m',   # Magenta
+            'RESET': '\033[0m'        # Reset
         }
-        if record.exc_info: # Verifica si hay información de excepción
-            exc_type, exc_value, exc_traceback = record.exc_info
-            log_message["traceback"] = traceback.format_exception(exc_type, exc_value, exc_traceback)
-
-        return json.dumps(log_message)
+        
+        color = COLORS.get(record.levelname, '')
+        reset = COLORS['RESET']
+        
+        # Formato simple: [TIMESTAMP] LEVEL: mensaje
+        timestamp = self.formatTime(record, '%Y-%m-%d %H:%M:%S')
+        level = f"{color}{record.levelname:8s}{reset}"
+        
+        message = record.getMessage()
+        
+        return f"[{timestamp}] {level}: {message}"
 
 handler = logging.StreamHandler()
-handler.setFormatter(JsonFormatter())
+handler.setFormatter(SimpleFormatter())
 logging.basicConfig(level=logging.INFO, handlers=[handler])
 
 logger = logging.getLogger(__name__)
