@@ -253,18 +253,52 @@ def clean_sms_message(message):
     return final_text
 
 def format_phone_number(phone):
-    """Formatea el número de teléfono para el módem GSM"""
+    """Formatea el número de teléfono para el módem GSM (Argentina)"""
     # Limpiar número de teléfono (remover caracteres no numéricos excepto +)
     clean_phone = ''.join(c for c in phone if c.isdigit() or c == '+')
 
-    # Si no tiene código de país, asumir que es argentino (+54)
-    if not clean_phone.startswith('+'):
-        if clean_phone.startswith('54'):
-            clean_phone = '+' + clean_phone
-        elif clean_phone.startswith('0'):
-            clean_phone = '+54' + clean_phone[1:]
-        else:
-            clean_phone = '+54' + clean_phone
+    # Si ya tiene +, removerlo temporalmente para procesar
+    has_plus = clean_phone.startswith('+')
+    if has_plus:
+        clean_phone = clean_phone[1:]
+
+    # Paso 1: Corregir errores comunes de formato
+    # Caso: 005493516483831 → debe ser 5493516483831
+    if clean_phone.startswith('00'):
+        clean_phone = clean_phone[2:]  # Remover el '00' del inicio
+
+    # Caso: 5405493516483831 → debe ser 5493516483831
+    # Detectar si tiene '54054' o '5405' seguido de '49'
+    if clean_phone.startswith('540549'):
+        clean_phone = clean_phone[2:]  # Remover '54', dejar '05493516483831' → procesará abajo
+    elif clean_phone.startswith('54054'):
+        # Caso raro: 54054351... → debe ser 549351...
+        clean_phone = '549' + clean_phone[5:]  # Remover '54054', agregar '549'
+
+    # Caso: 05493516483831 o 0549351... → debe ser 5493516483831
+    if clean_phone.startswith('0549'):
+        clean_phone = clean_phone[1:]  # Remover solo el '0', dejar '5493516483831'
+    elif clean_phone.startswith('054'):
+        # Caso: 054351XXXXXX → debe ser 549351XXXXXX
+        clean_phone = '549' + clean_phone[3:]  # Remover '054', agregar '549'
+
+    # Paso 2: Normalizar según diferentes formatos
+    if clean_phone.startswith('549'):
+        # Ya tiene formato correcto: 549351XXXXXXX
+        clean_phone = '+' + clean_phone
+    elif clean_phone.startswith('54'):
+        # Formato: 54351XXXXXXX (falta el 9)
+        # Insertar el 9 después del 54
+        clean_phone = '+549' + clean_phone[2:]
+    elif clean_phone.startswith('0'):
+        # Formato: 0351XXXXXXX (número local con 0)
+        clean_phone = '+549' + clean_phone[1:]
+    elif clean_phone.startswith('351') or clean_phone.startswith('11'):
+        # Formato: 351XXXXXXX o 11XXXXXXXX (directo sin código de país)
+        clean_phone = '+549' + clean_phone
+    else:
+        # Otros casos: asumir que falta todo el prefijo
+        clean_phone = '+549' + clean_phone
 
     return clean_phone
 
