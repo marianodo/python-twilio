@@ -238,7 +238,7 @@ def send_sms_via_modem(phone, message):
     try:
         if not modem or not modem.is_open:
             raise Exception("Módem no inicializado")
-        
+
         # Validar que el teléfono tenga al menos 7 dígitos
         if not phone or len(phone) < 7:
             error = f"Teléfono inválido: {phone}"
@@ -248,7 +248,11 @@ def send_sms_via_modem(phone, message):
         # Formatear número de teléfono
         clean_phone = format_phone_number(phone)
         logger.info(f"Enviando SMS a {clean_phone}")
-        
+
+        # Limpiar buffer antes de enviar para evitar datos residuales
+        modem.reset_input_buffer()
+        modem.reset_output_buffer()
+
         # Configurar modo texto
         response = send_at_command(modem, 'AT+CMGF=1')
         if 'OK' not in response:
