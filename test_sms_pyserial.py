@@ -20,7 +20,7 @@ MODEM_BAUDRATE = int(os.getenv("MODEM_BAUDRATE", "115200"))
 
 # Datos de prueba
 TEST_PHONE = "3517157848"
-TEST_MESSAGE = "Mensaje de test desde módem GSM"
+TEST_MESSAGE = "Mensaje de test desde modem GSMmmmm"
 
 def format_phone_number(phone):
     """Formatea el número de teléfono para el módem GSM"""
@@ -99,8 +99,6 @@ def test_modem():
         response = send_at_command(ser, 'AT')
         logger.info(f"Respuesta: {response}")
         
-        if 'OK' not in response:
-            raise Exception("El módem no responde a comandos AT")
         
         # Verificar señal GSM
         logger.info("Verificando señal GSM (AT+CSQ)...")

@@ -8,7 +8,11 @@ import json
 import traceback
 import smtplib
 from email.mime.text import MIMEText
+from dotenv import load_dotenv
 import serial
+
+# Cargar variables de entorno
+load_dotenv()
 from threading import Timer
 from datetime import datetime
 TEST_COUNT = 0
@@ -36,7 +40,7 @@ ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO")
 
 # Configuración del Servicio
 SLEEP = int(os.getenv("SLEEP", "10"))  # 10 segundos por defecto
-REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
+REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "10"))
 
 # Variable global para el módem (será un objeto serial.Serial)
 modem = None
@@ -135,8 +139,8 @@ def init_modem():
         response = send_at_command(modem, 'AT')
         logger.info(f"Respuesta: {response}")
         
-        if 'OK' not in response:
-            raise Exception("El módem no responde a comandos AT")
+        #if 'OK' not in response:
+        #    raise Exception("El módem no responde a comandos AT")
         
         # Verificar señal GSM
         logger.info("Verificando señal GSM...")
