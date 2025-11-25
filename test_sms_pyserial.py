@@ -3,6 +3,7 @@ import time
 import logging
 from dotenv import load_dotenv
 import serial
+import unicodedata
 
 # Cargar variables de entorno
 load_dotenv()
@@ -21,6 +22,41 @@ MODEM_BAUDRATE = int(os.getenv("MODEM_BAUDRATE", "115200"))
 # Datos de prueba
 TEST_PHONE = "3517157848"
 TEST_MESSAGE = "Mensaje de test desde modem GSMmmmm"
+
+def clean_sms_message(message):
+    """Limpia el mensaje SMS removiendo acentos, tildes, ñ y caracteres especiales"""
+    if not message:
+        return message
+
+    # Mapeo manual de caracteres especiales comunes en español
+    replacements = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+        'ñ': 'n', 'Ñ': 'N',
+        'ü': 'u', 'Ü': 'U',
+        '¿': '?', '¡': '!',
+        'ç': 'c', 'Ç': 'C',
+        'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+        'À': 'A', 'È': 'E', 'Ì': 'I', 'Ò': 'O', 'Ù': 'U',
+        ''': "'", ''': "'", '"': '"', '"': '"',
+        '–': '-', '—': '-', '…': '...',
+    }
+
+    # Aplicar reemplazos
+    cleaned = message
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+
+    # Normalizar usando unicodedata para casos no cubiertos
+    # NFD descompone caracteres acentuados en base + acento
+    normalized = unicodedata.normalize('NFD', cleaned)
+    # Filtrar solo caracteres ASCII básicos (letras, números, puntuación común)
+    ascii_text = ''.join(char for char in normalized if unicodedata.category(char) != 'Mn')
+
+    # Mantener solo caracteres ASCII imprimibles (32-126) más saltos de línea
+    final_text = ''.join(char for char in ascii_text if ord(char) < 128)
+
+    return final_text
 
 def format_phone_number(phone):
     """Formatea el número de teléfono para el módem GSM"""
@@ -112,12 +148,17 @@ def test_modem():
         
         # Formatear número de teléfono
         clean_phone = format_phone_number(TEST_PHONE)
+
+        # Limpiar mensaje de caracteres especiales
+        clean_message = clean_sms_message(TEST_MESSAGE)
+
         logger.info("")
         logger.info("=" * 60)
         logger.info("PREPARANDO ENVÍO DE SMS")
         logger.info("=" * 60)
         logger.info(f"Destino: {clean_phone}")
-        logger.info(f"Mensaje: {TEST_MESSAGE}")
+        logger.info(f"Mensaje original: {TEST_MESSAGE}")
+        logger.info(f"Mensaje limpio: {clean_message}")
         logger.info("")
         
         # Configurar modo texto
@@ -150,10 +191,10 @@ def test_modem():
         
         if not prompt_received:
             raise Exception("Timeout esperando prompt '>' del módem")
-        
-        # Enviar mensaje y Ctrl+Z (0x1A) usando ser.write directamente
+
+        # Enviar mensaje limpio y Ctrl+Z (0x1A) usando ser.write directamente
         # porque aquí ya estamos en modo interactivo
-        ser.write(TEST_MESSAGE.encode('utf-8'))
+        ser.write(clean_message.encode('utf-8'))
         ser.write(b'\x1A')  # Ctrl+Z para finalizar
         
         logger.info("Esperando confirmación del módem...")

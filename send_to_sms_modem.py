@@ -10,6 +10,7 @@ import smtplib
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import serial
+import unicodedata
 
 # Cargar variables de entorno
 load_dotenv()
@@ -216,11 +217,46 @@ def check_modem_status():
         logger.error(f"Error verificando estado del módem: {e}")
         return {"status": "error", "error": str(e)}
 
+def clean_sms_message(message):
+    """Limpia el mensaje SMS removiendo acentos, tildes, ñ y caracteres especiales"""
+    if not message:
+        return message
+
+    # Mapeo manual de caracteres especiales comunes en español
+    replacements = {
+        'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u',
+        'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U',
+        'ñ': 'n', 'Ñ': 'N',
+        'ü': 'u', 'Ü': 'U',
+        '¿': '?', '¡': '!',
+        'ç': 'c', 'Ç': 'C',
+        'à': 'a', 'è': 'e', 'ì': 'i', 'ò': 'o', 'ù': 'u',
+        'À': 'A', 'È': 'E', 'Ì': 'I', 'Ò': 'O', 'Ù': 'U',
+        ''': "'", ''': "'", '"': '"', '"': '"',
+        '–': '-', '—': '-', '…': '...',
+    }
+
+    # Aplicar reemplazos
+    cleaned = message
+    for old, new in replacements.items():
+        cleaned = cleaned.replace(old, new)
+
+    # Normalizar usando unicodedata para casos no cubiertos
+    # NFD descompone caracteres acentuados en base + acento
+    normalized = unicodedata.normalize('NFD', cleaned)
+    # Filtrar solo caracteres ASCII básicos (letras, números, puntuación común)
+    ascii_text = ''.join(char for char in normalized if unicodedata.category(char) != 'Mn')
+
+    # Mantener solo caracteres ASCII imprimibles (32-126) más saltos de línea
+    final_text = ''.join(char for char in ascii_text if ord(char) < 128)
+
+    return final_text
+
 def format_phone_number(phone):
     """Formatea el número de teléfono para el módem GSM"""
     # Limpiar número de teléfono (remover caracteres no numéricos excepto +)
     clean_phone = ''.join(c for c in phone if c.isdigit() or c == '+')
-    
+
     # Si no tiene código de país, asumir que es argentino (+54)
     if not clean_phone.startswith('+'):
         if clean_phone.startswith('54'):
@@ -229,7 +265,7 @@ def format_phone_number(phone):
             clean_phone = '+54' + clean_phone[1:]
         else:
             clean_phone = '+54' + clean_phone
-    
+
     return clean_phone
 
 def send_sms_via_modem(phone, message):
@@ -247,7 +283,12 @@ def send_sms_via_modem(phone, message):
 
         # Formatear número de teléfono
         clean_phone = format_phone_number(phone)
+
+        # Limpiar mensaje de caracteres especiales, acentos, ñ, etc.
+        clean_message = clean_sms_message(message)
         logger.info(f"Enviando SMS a {clean_phone}")
+        logger.debug(f"Mensaje original: {message}")
+        logger.debug(f"Mensaje limpio: {clean_message}")
 
         # Limpiar buffer antes de enviar para evitar datos residuales
         modem.reset_input_buffer()
@@ -257,7 +298,7 @@ def send_sms_via_modem(phone, message):
         response = send_at_command(modem, 'AT+CMGF=1')
         if 'OK' not in response:
             raise Exception("No se pudo configurar modo texto")
-        
+
         # Enviar SMS
         logger.debug(f"Enviando comando AT+CMGS a {clean_phone}")
         modem.write(f'AT+CMGS="{clean_phone}"\r\n'.encode('utf-8'))
@@ -278,9 +319,9 @@ def send_sms_via_modem(phone, message):
         
         if not prompt_received:
             raise Exception("Timeout esperando prompt '>' del módem")
-        
-        # Enviar mensaje y Ctrl+Z (0x1A)
-        modem.write(message.encode('utf-8'))
+
+        # Enviar mensaje limpio y Ctrl+Z (0x1A)
+        modem.write(clean_message.encode('utf-8'))
         modem.write(b'\x1A')  # Ctrl+Z
         
         # Esperar respuesta final
