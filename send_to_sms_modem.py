@@ -458,45 +458,93 @@ def routine(db):
                 phones_failed = 0
 
                 for phone in phones_list:
-                    try:
-                        success, obs = send_sms_via_modem(phone, message)
-                        
-                        if success:
-                            phones_sent += 1
-                        else:
-                            phones_failed += 1
-                            all_sent = False
-                            # Guardar observación de error
-                            if isinstance(obs, Exception):
-                                obs_text = str(obs)
+                    max_retries = 3
+                    success = False
+                    last_error = None
+
+                    # Reintentar hasta 3 veces por teléfono
+                    for attempt in range(1, max_retries + 1):
+                        try:
+                            logger.info(f"Intento {attempt}/{max_retries} de envío a {phone}")
+                            success, obs = send_sms_via_modem(phone, message)
+
+                            if success:
+                                phones_sent += 1
+                                logger.info(f"✅ SMS enviado exitosamente a {phone} en intento {attempt}")
+                                break  # Salir del loop de reintentos si fue exitoso
                             else:
-                                obs_text = obs
-                            # Escapar comillas simples para evitar errores SQL
-                            obs_text_escaped = obs_text.replace("'", "''")[:500]
-                            db.insert_obs(obs_text_escaped)
-                    except Exception as phone_error:
-                        logger.exception(f"Error al procesar teléfono {phone}: {str(phone_error)}")
+                                last_error = obs
+                                logger.warning(f"Intento {attempt}/{max_retries} falló para {phone}: {obs}")
+
+                                # Si falla y no es el último intento, verificar si necesita reconexión
+                                if attempt < max_retries:
+                                    # Verificar si el error es de módem (no de red/señal)
+                                    error_str = str(obs).lower()
+                                    if any(keyword in error_str for keyword in ['módem', 'modem', 'puerto', 'port', 'timeout', 'no responde']):
+                                        logger.warning(f"Error de módem detectado, verificando conexión antes del reintento...")
+                                        # Verificar estado del módem
+                                        modem_status = check_modem_status()
+                                        if modem_status["status"] == "error":
+                                            logger.warning("Módem no disponible, intentando reconectar...")
+                                            reconnect_modem()
+
+                                    logger.info(f"Esperando 2 segundos antes del reintento {attempt + 1}...")
+                                    time.sleep(2)
+                        except Exception as phone_error:
+                            last_error = str(phone_error)
+                            logger.exception(f"Excepción en intento {attempt}/{max_retries} para {phone}: {str(phone_error)}")
+
+                            # Si es excepción y no es el último intento, verificar módem
+                            if attempt < max_retries:
+                                logger.warning(f"Excepción detectada, verificando estado del módem...")
+                                modem_status = check_modem_status()
+                                if modem_status["status"] == "error":
+                                    logger.warning("Módem no disponible, intentando reconectar...")
+                                    reconnect_modem()
+
+                                logger.info(f"Esperando 2 segundos antes del reintento {attempt + 1}...")
+                                time.sleep(2)
+
+                    # Si después de todos los intentos no fue exitoso
+                    if not success:
                         phones_failed += 1
                         all_sent = False
+                        logger.error(f"❌ TODOS los intentos ({max_retries}) fallaron para {phone}")
+                        # Guardar observación del último error
+                        if last_error:
+                            if isinstance(last_error, Exception):
+                                obs_text = str(last_error)
+                            else:
+                                obs_text = last_error
+                            # Escapar comillas simples para evitar errores SQL
+                            obs_text_escaped = obs_text.replace("'", "''")[:500]
+                            db.insert_obs(f"3 intentos fallidos para {phone}: {obs_text_escaped}")
 
-                # Marcar el mensaje como enviado independientemente de los resultados
+                # Marcar como procesado después de intentar todos los teléfonos
+                # (ya sea exitoso o fallido, después de 3 reintentos por teléfono)
                 db.mark_as_process("mensaje_a_sms", msg_id)
                 messages_processed += 1
-                
-                if all_sent:
-                    messages_sent += 1
-                    logger.info(f"Mensaje SMS {msg_id} enviado correctamente a {phones_sent} teléfonos via módem")
+
+                if phones_sent > 0:
+                    if all_sent:
+                        messages_sent += 1
+                        logger.info(f"Mensaje SMS {msg_id} enviado correctamente a {phones_sent} teléfonos via módem")
+                    else:
+                        messages_failed += 1
+                        logger.warning(f"Mensaje SMS {msg_id}: {phones_sent} enviados, {phones_failed} fallidos via módem")
                 else:
+                    # Si TODOS los teléfonos fallaron después de 3 reintentos, marcar como procesado de todas formas
                     messages_failed += 1
-                    logger.warning(f"Mensaje SMS {msg_id}: {phones_sent} enviados, {phones_failed} fallidos via módem")
+                    logger.error(f"Mensaje SMS {msg_id}: TODOS los envíos fallaron ({phones_failed} teléfonos) después de 3 reintentos. Se marca como procesado para evitar bucle infinito.")
             
             except Exception as msg_error:
                 logger.exception(f"Error al procesar mensaje SMS {msg}: {str(msg_error)}")
-                # Intentar marcar como enviado para evitar reprocesamiento infinito
+                # Marcar como procesado para evitar reprocesamiento infinito en caso de error estructural
                 try:
                     db.mark_as_process("mensaje_a_sms", msg_id)
-                except Exception:
-                    pass
+                    logger.warning(f"Mensaje SMS {msg_id} marcado como procesado debido a error de procesamiento")
+                except Exception as mark_error:
+                    logger.error(f"No se pudo marcar mensaje {msg_id} como procesado: {mark_error}")
                 messages_failed += 1
         
         # Resumen de la ejecución
