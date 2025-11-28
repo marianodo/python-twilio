@@ -12,6 +12,10 @@ from twilio.rest import Client
 from flask import Flask, jsonify
 from threading import Thread, Timer
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde el archivo .env
+load_dotenv()
 
 app = Flask(__name__)
 TEST_COUNT = 0
@@ -185,7 +189,7 @@ def routine(db):
         
         for msg in unsent_messages:
             try:
-                msg_id, message, _, code_cli, _, _, _ = msg
+                msg_id, message, _, code_cli, _, _, _, _ = msg
                 logger.info(f"Procesando mensaje de alarma ID {msg_id} para cliente {code_cli}")
                 
                 # Obtener información del cliente
