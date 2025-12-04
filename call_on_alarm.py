@@ -210,17 +210,20 @@ def routine(db):
                         id, client, name, phone, event = row
                         logger.info(f"Procesando contacto: {name} ({phone}), Evento: {event}")
 
-                        # Verificar si el cliente ya está en la lista temporal
-                        if client in tmp_list.get_list():
-                            logger.info(f"Cliente {client} ya fue llamado recientemente, saltando...")
+                        # Crear identificador único combinando cliente y teléfono
+                        client_phone_key = f"{client}_{phone}"
+
+                        # Verificar si este cliente-teléfono ya fue llamado recientemente
+                        if client_phone_key in tmp_list.get_list():
+                            logger.info(f"Cliente {client} - Teléfono {phone} ya fue llamado recientemente, saltando...")
                             continue
 
                         # Verificar si el mensaje contiene el evento que requiere llamada
                         if is_event_to_call(event, message):
                             logger.info(f"Evento '{event}' detectado en mensaje, realizando llamada...")
 
-                            # Agregar cliente a lista temporal
-                            tmp_list.insert(client, TIME_BETWEEN_CALL)
+                            # Agregar cliente-teléfono a lista temporal
+                            tmp_list.insert(client_phone_key, TIME_BETWEEN_CALL)
 
                             # Realizar llamada
                             success, result = call_to_phone(message, phone)
