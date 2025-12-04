@@ -192,46 +192,53 @@ def routine(db):
                 msg_id, message, _, code_cli, _, _, _, _ = msg
                 logger.info(f"Procesando mensaje de alarma ID {msg_id} para cliente {code_cli}")
                 
-                # Obtener información del cliente
+                # Obtener información del cliente (puede haber múltiples filas)
                 query = f"SELECT * FROM clientes_llamada WHERE abonado = {code_cli}"
-                row = db.get_one_row(query)
-                
-                if not row:
+                rows = db.get_unsent(query)  # Usa get_unsent en lugar de get_one_row
+
+                if not rows:
                     logger.warning(f"No se encontró información de llamada para el cliente {code_cli}")
                     db.mark_as_process("mensaje_llamada_por_robo", msg_id)
                     messages_processed += 1
                     continue
-                
-                id, client, name, phone, event = row
-                logger.info(f"Cliente encontrado: {name} ({phone}), Evento: {event}")
-                
-                # Verificar si el cliente ya está en la lista temporal
-                if client in tmp_list.get_list():
-                    logger.info(f"Cliente {client} ya fue llamado recientemente, saltando...")
-                    db.mark_as_process("mensaje_llamada_por_robo", msg_id)
-                    messages_processed += 1
-                    continue
-                
-                # Verificar si el mensaje contiene el evento que requiere llamada
-                if is_event_to_call(event, message):
-                    logger.info(f"Evento '{event}' detectado en mensaje, realizando llamada...")
-                    
-                    # Agregar cliente a lista temporal
-                    tmp_list.insert(client, TIME_BETWEEN_CALL)
-                    
-                    # Realizar llamada
-                    success, result = call_to_phone(message, phone)
-                    
-                    if success:
-                        calls_made += 1
-                        logger.info(f"ALARMA: Llamada exitosa al teléfono {phone} por evento {event}. SID: {result}")
-                    else:
+
+                logger.info(f"Se encontraron {len(rows)} contactos para el cliente {code_cli}")
+
+                # Procesar cada contacto del cliente
+                for row in rows:
+                    try:
+                        id, client, name, phone, event = row
+                        logger.info(f"Procesando contacto: {name} ({phone}), Evento: {event}")
+
+                        # Verificar si el cliente ya está en la lista temporal
+                        if client in tmp_list.get_list():
+                            logger.info(f"Cliente {client} ya fue llamado recientemente, saltando...")
+                            continue
+
+                        # Verificar si el mensaje contiene el evento que requiere llamada
+                        if is_event_to_call(event, message):
+                            logger.info(f"Evento '{event}' detectado en mensaje, realizando llamada...")
+
+                            # Agregar cliente a lista temporal
+                            tmp_list.insert(client, TIME_BETWEEN_CALL)
+
+                            # Realizar llamada
+                            success, result = call_to_phone(message, phone)
+
+                            if success:
+                                calls_made += 1
+                                logger.info(f"ALARMA: Llamada exitosa al teléfono {phone} por evento {event}. SID: {result}")
+                            else:
+                                calls_failed += 1
+                                logger.error(f"ALARMA: Error en llamada al teléfono {phone} por evento {event}. Error: {result}")
+                                # Guardar observación de error
+                                db.insert_obs(f"Error en llamada: {result[:500]}")
+                        else:
+                            logger.info(f"Evento '{event}' no detectado en mensaje, saltando llamada...")
+
+                    except Exception as contact_error:
+                        logger.exception(f"Error al procesar contacto {row}: {str(contact_error)}")
                         calls_failed += 1
-                        logger.error(f"ALARMA: Error en llamada al teléfono {phone} por evento {event}. Error: {result}")
-                        # Guardar observación de error
-                        db.insert_obs(f"Error en llamada: {result[:500]}")
-                else:
-                    logger.info(f"Evento '{event}' no detectado en mensaje, saltando llamada...")
                 
                 # Marcar mensaje como procesado
                 db.mark_as_process("mensaje_llamada_por_robo", msg_id)
