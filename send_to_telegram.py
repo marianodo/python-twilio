@@ -1,6 +1,5 @@
 import os
 import logging
-import requests
 import time
 import signal
 import sys
@@ -11,6 +10,8 @@ from flask import Flask, jsonify
 from threading import Thread, Timer
 from datetime import datetime
 from dotenv import load_dotenv
+import telegram
+from telegram.error import TelegramError, NetworkError, TimedOut
 
 # Cargar variables de entorno desde el archivo .env
 load_dotenv()
@@ -29,7 +30,8 @@ SLEEP = int(os.getenv("SLEEP", "10"))  # Cambiado a 10 segundos por defecto
 REQUEST_TIMEOUT = 30  # Timeout para peticiones HTTP en segundos
 REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "60"))
 
-API = f"https://api.telegram.org/bot{TOKEN}"
+# Inicializar bot de Telegram
+bot = telegram.Bot(token=TOKEN)
 
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -167,7 +169,7 @@ def routine(db):
 
 def send_message_to_phone(db, phone, message):
     """
-    Envía un mensaje a un teléfono específico usando la API de Telegram.
+    Envía un mensaje a un teléfono específico usando la librería python-telegram-bot.
     """
     try:
         # Validar que el teléfono tenga al menos 7 dígitos
@@ -182,24 +184,31 @@ def send_message_to_phone(db, phone, message):
         if chat_id_result:
             chat_id = chat_id_result[0]
             logger.info(f"Chat_id encontrado para teléfono terminado en {last_num_phone}: {chat_id}")
-            url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
-            logger.info(f"Enviando mensaje a URL: {url[:100]}...")  # Log primeros 100 caracteres
-            # Agregar timeout para evitar que las peticiones se queden colgadas
-            response = requests.get(url, timeout=REQUEST_TIMEOUT)
+            logger.info(f"Enviando mensaje a chat_id {chat_id}")
 
-            if response.status_code == 200:
-                logger.info(f"Mensaje enviado exitosamente a {phone}")
-                return True, ""
-            else:
-                error = f"Error al enviar mensaje a {phone}: Código {response.status_code}, Respuesta: {response.text}"
-                logger.error(error)
-                return False, error
+            # Enviar mensaje usando la librería de Telegram
+            bot.send_message(
+                chat_id=chat_id,
+                text=message,
+                timeout=REQUEST_TIMEOUT
+            )
+
+            logger.info(f"Mensaje enviado exitosamente a {phone}")
+            return True, ""
         else:
             error = f"Teléfono {phone} no está registrado en la DB."
             logger.warning(error)
             return False, error
-    except requests.Timeout:
+    except TimedOut:
         error = f"Timeout al enviar mensaje a {phone}"
+        logger.error(error)
+        return False, error
+    except NetworkError as e:
+        error = f"Error de red al enviar mensaje a {phone}: {str(e)}"
+        logger.error(error)
+        return False, error
+    except TelegramError as e:
+        error = f"Error de Telegram al enviar mensaje a {phone}: {str(e)}"
         logger.error(error)
         return False, error
     except Exception as e:

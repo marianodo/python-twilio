@@ -78,7 +78,9 @@ class Database(object):
         self.__connection.commit()
 
     def insert_obs(self, obs):
-        self.__session.execute(INSERT_OBS.format(obs))
+        # Escapar comillas simples para evitar errores de SQL
+        obs_escaped = obs.replace("'", "''")
+        self.__session.execute(INSERT_OBS.format(obs_escaped))
         self.__connection.commit()
 
     def getClaimId(self, messageId):
