@@ -10,6 +10,10 @@ import traceback
 from flask import Flask, jsonify
 from threading import Thread, Timer
 from datetime import datetime
+from dotenv import load_dotenv
+
+# Cargar variables de entorno desde el archivo .env
+load_dotenv()
 
 app = Flask(__name__)
 TEST_COUNT = 0
@@ -173,12 +177,13 @@ def send_message_to_phone(db, phone, message):
             return False, error
 
         last_num_phone = phone[-7:]
-        chat_id = db.get_chat_id(last_num_phone)
-        logger.info(f"Buscando chat_id para teléfono terminado en {last_num_phone}: {chat_id}")
-        
-        if chat_id:
-            chat_id = chat_id[0]
+        chat_id_result = db.get_chat_id(last_num_phone)
+
+        if chat_id_result:
+            chat_id = chat_id_result[0]
+            logger.info(f"Chat_id encontrado para teléfono terminado en {last_num_phone}: {chat_id}")
             url = f"{API}/sendMessage?chat_id={chat_id}&text={message}"
+            logger.info(f"Enviando mensaje a URL: {url[:100]}...")  # Log primeros 100 caracteres
             # Agregar timeout para evitar que las peticiones se queden colgadas
             response = requests.get(url, timeout=REQUEST_TIMEOUT)
 
