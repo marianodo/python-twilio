@@ -77,6 +77,12 @@ class Database(object):
         self.__session.execute(query)
         self.__connection.commit()
 
+    def set_delivered(self, table, id, delivered):
+        """Guarda si el SMS llegó al destinatario (1) o no (0)."""
+        query = f"UPDATE {table} SET men_entregado = {int(delivered)} WHERE id = {int(id)}"
+        self.__session.execute(query)
+        self.__connection.commit()
+
     def insert_obs(self, obs):
         self.__session.execute(INSERT_OBS.format(obs))
         self.__connection.commit()

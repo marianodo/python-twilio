@@ -2,3 +2,6 @@
 *.pyc
 sms_sent_cache.json
 sms_sent_cache.json.tmp
+sms_delivery_pending.json
+sms_delivery_pending.json.tmp
+sms_modem.log*
