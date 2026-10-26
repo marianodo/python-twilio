@@ -11,14 +11,15 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import serial
 import unicodedata
+import hashlib
 
 # Cargar variables de entorno
 load_dotenv()
 from threading import Timer
 from datetime import datetime
 TEST_COUNT = 0
-LAST_SUCCESSFUL_RUN = datetime.now()
-WATCHDOG_TIMEOUT = 300  # 5 minutos sin actividad exitosa desencadena reinicio
+LAST_ACTIVITY = datetime.now()
+WATCHDOG_TIMEOUT = 300  # 5 minutos sin actividad (ni siquiera un intento de envío) desencadena reinicio
 
 # Configuración de Base de Datos
 DB_USER = os.getenv("DB_USER")
@@ -42,6 +43,14 @@ ALERT_EMAIL_TO = os.getenv("ALERT_EMAIL_TO")
 # Configuración del Servicio
 SLEEP = int(os.getenv("SLEEP", "10"))  # 10 segundos por defecto
 REBOOT_AFTER_ATTEMPS = int(os.getenv("REBOOT_AFTER_ATTEMPS", "10"))
+
+# Anti-duplicados: no reenviar el mismo texto al mismo número dentro de esta ventana (segundos, 0 = desactivado).
+DEDUP_WINDOW = int(os.getenv("DEDUP_WINDOW", "120"))
+# Se guarda en disco para que sobreviva a un reinicio (por ejemplo, si el watchdog corta a mitad de un lote).
+DEDUP_CACHE_FILE = os.getenv(
+    "DEDUP_CACHE_FILE",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "sms_sent_cache.json"),
+)
 
 # Variable global para el módem (será un objeto serial.Serial)
 modem = None
@@ -302,6 +311,57 @@ def format_phone_number(phone):
 
     return clean_phone
 
+# Cache anti-duplicados: hash(número + texto) -> momento (epoch) del último envío exitoso.
+_sent_cache = {}
+
+def _cache_key(phone, message):
+    """Número normalizado + texto tal como se envía. Se hashea para no guardar el contenido en disco."""
+    raw = f"{format_phone_number(phone)}\n{clean_sms_message(message)}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+def _is_fresh(sent_at, now):
+    # El "0 <=" evita bloquear envíos si el reloj del sistema se atrasa
+    return 0 <= now - sent_at < DEDUP_WINDOW
+
+def _purge_sent_cache(now):
+    for key in [k for k, sent_at in _sent_cache.items() if not _is_fresh(sent_at, now)]:
+        del _sent_cache[key]
+
+def _save_sent_cache():
+    tmp_path = DEDUP_CACHE_FILE + ".tmp"
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(_sent_cache, f)
+        os.replace(tmp_path, DEDUP_CACHE_FILE)
+    except Exception as e:
+        logger.warning(f"No se pudo guardar el cache anti-duplicados: {e}")
+
+def load_sent_cache():
+    """Carga desde disco los envíos recientes (por si el proceso se reinició hace poco)."""
+    global _sent_cache
+    try:
+        with open(DEDUP_CACHE_FILE, "r", encoding="utf-8") as f:
+            _sent_cache = {k: float(v) for k, v in json.load(f).items()}
+    except FileNotFoundError:
+        _sent_cache = {}
+    except Exception as e:
+        logger.warning(f"No se pudo leer el cache anti-duplicados ({e}). Se empieza vacío.")
+        _sent_cache = {}
+    _purge_sent_cache(time.time())
+    logger.info(f"Cache anti-duplicados: {len(_sent_cache)} envíos recientes cargados (ventana de {DEDUP_WINDOW} s)")
+
+def was_sent_recently(phone, message):
+    """True si este mismo texto ya se envió con éxito a este número dentro de DEDUP_WINDOW."""
+    sent_at = _sent_cache.get(_cache_key(phone, message))
+    return sent_at is not None and _is_fresh(sent_at, time.time())
+
+def remember_sent(phone, message):
+    """Registra un envío exitoso y lo persiste en disco."""
+    now = time.time()
+    _purge_sent_cache(now)
+    _sent_cache[_cache_key(phone, message)] = now
+    _save_sent_cache()
+
 def send_sms_via_modem(phone, message):
     """Envía un SMS usando el módem GSM con pyserial"""
     global modem
@@ -404,6 +464,11 @@ def with_db_connection(func):
         raise ConnectionError("Fallo la conexión a la base de datos.")
     return wrapper
 
+def touch_heartbeat():
+    """Avisa al watchdog que el servicio sigue avanzando."""
+    global LAST_ACTIVITY
+    LAST_ACTIVITY = datetime.now()
+
 @with_db_connection
 def routine(db):
     """Rutina principal que lee mensajes no enviados y los envía por SMS via módem"""
@@ -434,8 +499,10 @@ def routine(db):
         messages_processed = 0
         messages_sent = 0
         messages_failed = 0
-        
+        messages_skipped = 0
+
         for msg in unsent_messages:
+            touch_heartbeat()
             try:
                 msg_id, message, _, code_cli, _, _, _, _ = msg
                 logger.info(f"Procesando mensaje SMS ID {msg_id} para cliente {code_cli}")
@@ -456,20 +523,29 @@ def routine(db):
                 all_sent = True
                 phones_sent = 0
                 phones_failed = 0
+                phones_skipped = 0
 
                 for phone in phones_list:
+                    # No reenviar el mismo texto al mismo número dentro de la ventana anti-duplicados
+                    if was_sent_recently(phone, message):
+                        phones_skipped += 1
+                        logger.info(f"⏭️ Omitido {phone}: este mismo mensaje ya se le envió hace menos de {DEDUP_WINDOW} s")
+                        continue
+
                     max_retries = 3
                     success = False
                     last_error = None
 
                     # Reintentar hasta 3 veces por teléfono
                     for attempt in range(1, max_retries + 1):
+                        touch_heartbeat()  # cada intento cuenta como actividad para el watchdog
                         try:
                             logger.info(f"Intento {attempt}/{max_retries} de envío a {phone}")
                             success, obs = send_sms_via_modem(phone, message)
 
                             if success:
                                 phones_sent += 1
+                                remember_sent(phone, message)
                                 logger.info(f"✅ SMS enviado exitosamente a {phone} en intento {attempt}")
                                 break  # Salir del loop de reintentos si fue exitoso
                             else:
@@ -525,13 +601,17 @@ def routine(db):
                 db.mark_as_process("mensaje_a_sms", msg_id)
                 messages_processed += 1
 
-                if phones_sent > 0:
+                skipped_note = f" ({phones_skipped} omitidos por duplicado)" if phones_skipped else ""
+                if phones_skipped > 0 and phones_sent == 0 and phones_failed == 0:
+                    messages_skipped += 1
+                    logger.info(f"Mensaje SMS {msg_id} omitido: el mismo texto ya se envió a todos sus teléfonos hace menos de {DEDUP_WINDOW} s")
+                elif phones_sent > 0:
                     if all_sent:
                         messages_sent += 1
-                        logger.info(f"Mensaje SMS {msg_id} enviado correctamente a {phones_sent} teléfonos via módem")
+                        logger.info(f"Mensaje SMS {msg_id} enviado correctamente a {phones_sent} teléfonos via módem{skipped_note}")
                     else:
                         messages_failed += 1
-                        logger.warning(f"Mensaje SMS {msg_id}: {phones_sent} enviados, {phones_failed} fallidos via módem")
+                        logger.warning(f"Mensaje SMS {msg_id}: {phones_sent} enviados, {phones_failed} fallidos via módem{skipped_note}")
                 else:
                     # Si TODOS los teléfonos fallaron después de 3 reintentos, marcar como procesado de todas formas
                     messages_failed += 1
@@ -549,7 +629,7 @@ def routine(db):
         
         # Resumen de la ejecución
         execution_time = time.time() - start_time
-        logger.info(f"Rutina SMS módem completada en {execution_time:.2f} segundos. Procesados: {messages_processed}, Exitosos: {messages_sent}, Fallidos: {messages_failed}")
+        logger.info(f"Rutina SMS módem completada en {execution_time:.2f} segundos. Procesados: {messages_processed}, Exitosos: {messages_sent}, Omitidos por duplicado: {messages_skipped}, Fallidos: {messages_failed}")
     
     except Exception as routine_error:
         logger.exception(f"Error general en la rutina SMS módem: {str(routine_error)}")
@@ -558,26 +638,26 @@ def routine(db):
 def health_check():
     """Verifica el estado del servicio y módem"""
     try:
-        # Calcula tiempo desde la última ejecución exitosa
-        time_since_last_success = (datetime.now() - LAST_SUCCESSFUL_RUN).total_seconds()
-        
+        # Calcula tiempo desde la última actividad
+        time_since_last_activity = (datetime.now() - LAST_ACTIVITY).total_seconds()
+
         # Verificar estado del módem
         modem_status = check_modem_status()
-        
-        # Si han pasado más de 5 minutos desde la última ejecución exitosa, considera que hay un problema
-        if time_since_last_success > WATCHDOG_TIMEOUT:
-            logger.warning(f"Health check: El servicio SMS módem lleva {time_since_last_success} segundos sin una ejecución exitosa")
+
+        # Si pasó más del timeout del watchdog sin actividad, considera que hay un problema
+        if time_since_last_activity > WATCHDOG_TIMEOUT:
+            logger.warning(f"Health check: El servicio SMS módem lleva {time_since_last_activity:.0f} segundos sin actividad")
             return {
                 "status": "warning",
-                "last_success": LAST_SUCCESSFUL_RUN.isoformat(),
-                "seconds_since_success": time_since_last_success,
+                "last_activity": LAST_ACTIVITY.isoformat(),
+                "seconds_since_activity": time_since_last_activity,
                 "modem_status": modem_status
             }
-        
+
         return {
             "status": "ok",
-            "last_success": LAST_SUCCESSFUL_RUN.isoformat(),
-            "seconds_since_success": time_since_last_success,
+            "last_activity": LAST_ACTIVITY.isoformat(),
+            "seconds_since_activity": time_since_last_activity,
             "modem_status": modem_status
         }
     except Exception as e:
@@ -585,14 +665,13 @@ def health_check():
         return {"status": "error", "error": str(e)}
 
 def watchdog_check():
-    """Comprueba si el programa está funcionando correctamente y lo reinicia si es necesario"""
-    global LAST_SUCCESSFUL_RUN
-    time_since_last_success = (datetime.now() - LAST_SUCCESSFUL_RUN).total_seconds()
-    
-    if time_since_last_success > WATCHDOG_TIMEOUT:
-        logger.critical(f"¡WATCHDOG ACTIVADO! Han pasado {time_since_last_success} segundos desde la última ejecución exitosa. Reiniciando...")
-        # En un entorno real, este es el punto donde reiniciaríamos el proceso
-        # En Railway, podemos salir con un código de error para que el sistema nos reinicie
+    """Corta el proceso si se quedó colgado (sin ninguna actividad durante WATCHDOG_TIMEOUT).
+    Un lote largo NO lo dispara: cada intento de envío refresca el heartbeat."""
+    time_since_last_activity = (datetime.now() - LAST_ACTIVITY).total_seconds()
+
+    if time_since_last_activity > WATCHDOG_TIMEOUT:
+        logger.critical(f"¡WATCHDOG ACTIVADO! Pasaron {time_since_last_activity:.0f} segundos sin actividad. Reiniciando...")
+        # Sale con código 1: run_sms_modem.bat (o Railway) vuelve a lanzar el script.
         os._exit(1)  # Fuerza la salida del proceso
     
     # Programa la próxima verificación
@@ -616,7 +695,10 @@ if __name__ == '__main__':
     # Configura manejadores de señales
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
-    
+
+    # Recuperar envíos recientes (por si venimos de un reinicio a mitad de un lote)
+    load_sent_cache()
+
     # Inicializar módem
     if not init_modem():
         logger.critical("No se pudo inicializar el módem. Saliendo...")
@@ -641,8 +723,7 @@ if __name__ == '__main__':
             logger.info(f"Chequeando tabla mensaje_a_sms para mensajes nuevos...")
             routine()
             
-            # Actualiza el timestamp de última ejecución exitosa
-            LAST_SUCCESSFUL_RUN = datetime.now()
+            touch_heartbeat()
             consecutive_errors = 0  # Reinicia el contador de errores
             
             # Calcula el tiempo que tomó la ejecución

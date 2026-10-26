@@ -1,2 +1,4 @@
 
 *.pyc
+sms_sent_cache.json
+sms_sent_cache.json.tmp
